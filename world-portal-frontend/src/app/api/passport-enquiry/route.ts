@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+
 import { z } from "zod";
 
 import { BackendError } from "@/server/api/backend";
@@ -79,22 +80,33 @@ export async function POST(request: Request) {
       },
     );
 
+    // The record exists, so its own id is a truthful reference if the service
+    // ever omits the application number — never a made-up one.
     return NextResponse.json({
-      data: { reference: record.applicationNo || `PASSPORT-${Date.now()}` },
+      data: { reference: record.applicationNo || record.id },
     });
-  } catch (err: any) {
+  } catch (err: unknown) {
     // A definite refusal — no session, a suspended account, a rejected field —
-    // must reach the form. Inventing a reference here would tell the applicant
-    // they had applied when nothing was filed.
+    // must reach the form as it is.
     if (err instanceof BackendError && err.status >= 400 && err.status < 500) {
       return NextResponse.json(
         { message: err.message, errors: err.errors },
         { status: err.status },
       );
     }
-    // If backend isn't reachable or errors out, fallback to local reference generation
-    console.warn("[passport-application] API fallback:", err?.message);
-    const reference = `PASSPORT-2026-${Math.floor(1000 + Math.random() * 9000)}`;
-    return NextResponse.json({ data: { reference } });
+    // The service is down or failed, so nothing was filed. Say so and let the
+    // applicant retry: a locally invented reference here told them they had
+    // applied when the console would never see the application.
+    console.warn(
+      "[passport-application] not filed:",
+      err instanceof Error ? err.message : err,
+    );
+    return NextResponse.json(
+      {
+        message:
+          "We couldn't file your application just now. Nothing was submitted — please try again in a few minutes.",
+      },
+      { status: 503 },
+    );
   }
 }
