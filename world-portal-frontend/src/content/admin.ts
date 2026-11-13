@@ -117,6 +117,8 @@ export const settings = {
   notifications: {
     title: "Notifications",
     body: "Where new enquiries and deadline reminders go.",
+    unavailable:
+      "Email alerts for staff aren't set up yet, so these can't be switched on. Applicants still get their own emails.",
     items: [
       {
         key: "newEnquiry",
