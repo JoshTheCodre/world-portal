@@ -11,13 +11,14 @@ import {
   toPassportApplication,
   toVisaApplication,
 } from "@/server/data/mappers";
-import { backendErrorResponse, listParamsFrom, paginate } from "@/server/http";
+import { backendErrorResponse, paginate, readListParams } from "@/server/http";
 
 export async function GET(request: Request) {
   const { session, response } = await requireSession();
   if (response) return response;
 
-  const params = listParamsFrom(request);
+  const { params, response: invalid } = readListParams(request);
+  if (invalid) return invalid;
   try {
     // No customer table exists — applicants are derived from their applications.
     const [visas, passports] = await Promise.all([

@@ -1,37 +1,41 @@
 "use client";
 
 import Link from "next/link";
+
 import { ArrowLeft, FileText, Mail, ShieldCheck, UserCheck } from "lucide-react";
 
-import { DetailItem, DetailList, PassportStatusBadge, PaymentStatusBadge } from "@/components/admin";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import {
+  DetailItem,
+  DetailList,
+  DetailLoadError,
+  PassportStatusBadge,
+  PaymentStatusBadge,
+} from "@/components/admin";
 import { Button } from "@/components/ui/button";
 import { Card, CardDescription, CardTitle } from "@/components/ui/card";
 import { Skeleton, SkeletonText } from "@/components/ui/skeleton";
 import { applications, humanise, passports as copy } from "@/content/admin";
-import { usePassport } from "@/features/passports/api/use-passport";
-import { AdvancePassportForm } from "@/features/passports/components/advance-passport-form";
 import { ApplicationTimeline } from "@/features/applications/components/application-timeline";
 import { ConfirmBankPaymentModal } from "@/features/applications/components/confirm-bank-payment-modal";
 import { DocumentViewerModal } from "@/features/applications/components/document-viewer-modal";
 import { EvaluateCostForm } from "@/features/applications/components/evaluate-cost-form";
 import { InviteApplicantModal } from "@/features/applications/components/invite-applicant-modal";
+import { usePassport } from "@/features/passports/api/use-passport";
+import { AdvancePassportForm } from "@/features/passports/components/advance-passport-form";
 import { formatCurrency, formatDate, formatRelative } from "@/lib/utils";
 
 export function PassportDetail({ id }: { id: string }) {
-  const { data: record, isPending, isError, error } = usePassport(id);
+  const { data: record, isPending, isError, error, refetch } = usePassport(id);
 
   if (isError) {
     return (
-      <Alert variant="destructive">
-        <AlertTitle>Could not load this passport application</AlertTitle>
-        <AlertDescription className="flex flex-col items-start gap-3">
-          {error instanceof Error ? error.message : "It may have been removed."}
-          <Button asChild variant="outline" size="sm">
-            <Link href="/admin/passports">Back to passport applications</Link>
-          </Button>
-        </AlertDescription>
-      </Alert>
+      <DetailLoadError
+        error={error}
+        onRetry={() => void refetch()}
+        backHref="/admin/passports"
+        backLabel="Back to passport applications"
+        noun="passport application"
+      />
     );
   }
 

@@ -100,10 +100,13 @@ test.describe("admin console", () => {
     await expect(page.getByRole("heading", { level: 1 })).toContainText(/passport/i);
   });
 
-  test("survives a stale dark theme left in localStorage", async ({ page }) => {
+  test("ignores a stale `theme` another local project left in localStorage", async ({
+    page,
+  }) => {
     // localhost:3000 is shared with every other local project, so a `theme`
     // another app wrote used to put the console into a theme it was never
-    // designed against — white-on-white fields and an invisible heading.
+    // designed against. The console keeps its toggle but stores the choice under
+    // its own `e-embassy-theme` key, so a foreign `theme` must change nothing.
     await page.goto("/admin/login");
     await page.evaluate(() => localStorage.setItem("theme", "dark"));
     await page.reload();

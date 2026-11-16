@@ -3,17 +3,13 @@
 import * as React from "react";
 
 import {
-  ArrowDownLeft,
   ArrowUpRight,
-  CheckCircle2,
   Clock,
   CreditCard,
   DollarSign,
-  Download,
   Percent,
   RefreshCw,
   ShieldAlert,
-  Wallet,
 } from "lucide-react";
 
 import { DataTablePagination, DataTableToolbar, TableEmptyRow, TableSkeletonRows } from "@/components/admin";
@@ -47,6 +43,16 @@ import type { Paginated } from "@/types";
 
 const COLUMNS = 6;
 
+/** Mirrors `summary` from `/api/admin/finance` — every figure is the service's own. */
+type FinanceSummary = {
+  revenueByCurrency: Record<string, number>;
+  outstandingByCurrency: Record<string, number>;
+  refundVolumeByCurrency: Record<string, number>;
+  refundCount: number;
+  serviceFeePercentage: number;
+  refundSurchargePercentage: number;
+};
+
 function MultiCurrencyDisplay({
   amountsByCurrency,
   fallbackCurrency = "NGN",
@@ -55,9 +61,10 @@ function MultiCurrencyDisplay({
   fallbackCurrency?: string;
 }) {
   if (!amountsByCurrency) {
+    // No figures came back (the request failed) — say nothing rather than ₦0.
     return (
-      <p className="font-sans mt-3 text-[28px] lg:text-[32px] font-bold tracking-tight text-foreground tabular-nums">
-        {formatCurrency(0, fallbackCurrency)}
+      <p className="font-sans mt-3 text-[28px] lg:text-[32px] font-bold tracking-tight text-muted-foreground tabular-nums">
+        {copy.unavailable}
       </p>
     );
   }
@@ -111,13 +118,8 @@ export function FinanceView() {
     tab: activeTab,
   });
 
-  const summary = (data as any)?.summary || {
-    revenueByCurrency: { NGN: 0 },
-    outstandingByCurrency: { NGN: 0 },
-    refundVolumeByCurrency: { NGN: 0 },
-    refundCount: 0,
-    effectiveMargin: 5.0,
-  };
+  // Undefined when the request failed: the cards then show "—", never invented figures.
+  const summary = (data as { summary?: FinanceSummary } | undefined)?.summary;
 
   return (
     <div className="flex flex-col gap-8">
@@ -133,7 +135,7 @@ export function FinanceView() {
           {isPending ? (
             <p className="font-sans mt-3 text-[28px] lg:text-[32px] font-bold tracking-tight text-foreground tabular-nums">...</p>
           ) : (
-            <MultiCurrencyDisplay amountsByCurrency={summary.revenueByCurrency} />
+            <MultiCurrencyDisplay amountsByCurrency={summary?.revenueByCurrency} />
           )}
           <div className="mt-3 flex items-center gap-1.5 text-xs text-emerald-600 font-medium">
             <ArrowUpRight className="size-3.5" />
@@ -151,9 +153,9 @@ export function FinanceView() {
           {isPending ? (
             <p className="font-sans mt-3 text-[28px] lg:text-[32px] font-bold tracking-tight text-foreground tabular-nums">...</p>
           ) : (
-            <MultiCurrencyDisplay amountsByCurrency={summary.outstandingByCurrency} />
+            <MultiCurrencyDisplay amountsByCurrency={summary?.outstandingByCurrency} />
           )}
-          <p className="mt-3 text-[12px] text-muted-foreground">Pending 50% installment releases</p>
+          <p className="mt-3 text-[12px] text-muted-foreground">{copy.cards.outstandingCaption}</p>
         </Card>
 
         <Card variant="solid" radius="lg" padding="none" className="p-5">
@@ -166,26 +168,30 @@ export function FinanceView() {
           <p className="font-sans mt-3 text-[28px] lg:text-[32px] font-bold tracking-tight text-foreground tabular-nums">
             {isPending
               ? "..."
-              : `${summary.refundCount} ${summary.refundCount === 1 ? "Request" : "Requests"}`}
+              : summary
+                ? `${summary.refundCount} ${summary.refundCount === 1 ? "Request" : "Requests"}`
+                : copy.unavailable}
           </p>
           <p className="mt-3 text-[12px] text-muted-foreground truncate">
             {isPending
               ? "..."
-              : `${formatMultiCurrencyInline(summary.refundVolumeByCurrency)} net refund volume`}
+              : summary
+                ? `${formatMultiCurrencyInline(summary.refundVolumeByCurrency)} net refund volume`
+                : copy.unavailable}
           </p>
         </Card>
 
         <Card variant="solid" radius="lg" padding="none" className="p-5">
           <div className="flex items-center justify-between">
-            <span className="text-[12.5px] font-medium text-muted-foreground">Effective Margin</span>
+            <span className="text-[12.5px] font-medium text-muted-foreground">{copy.cards.serviceFee}</span>
             <span className="grid size-9 place-items-center rounded-xl bg-primary/10 text-primary">
               <Percent className="size-4" />
             </span>
           </div>
           <p className="font-sans mt-3 text-[32px] font-bold tracking-tight text-foreground tabular-nums">
-            {isPending ? "..." : `${summary.effectiveMargin}%`}
+            {isPending ? "..." : summary ? `${summary.serviceFeePercentage}%` : copy.unavailable}
           </p>
-          <p className="mt-3 text-[12px] text-muted-foreground">Average service fee yield</p>
+          <p className="mt-3 text-[12px] text-muted-foreground">{copy.cards.serviceFeeCaption}</p>
         </Card>
       </div>
 
@@ -221,6 +227,7 @@ export function FinanceView() {
               isPlaceholderData={isPlaceholderData}
               params={params}
               set={set}
+              surchargePercentage={summary?.refundSurchargePercentage}
             />
           </TabsContent>
 
@@ -351,6 +358,7 @@ function RefundsTab({
   isPlaceholderData,
   params,
   set,
+  surchargePercentage,
 }: {
   data?: Paginated<BackendRefund>;
   isPending: boolean;
@@ -358,6 +366,8 @@ function RefundsTab({
   isPlaceholderData: boolean;
   params: any;
   set: (p: any) => void;
+  /** From the service's fee configuration; omitted from the header when unknown. */
+  surchargePercentage?: number;
 }) {
   return (
     <Card variant="solid" radius="lg" padding="none" className="gap-0 overflow-hidden">
@@ -373,7 +383,11 @@ function RefundsTab({
             <TableRow className="hover:bg-transparent">
               <TableHead>Refund Ref</TableHead>
               <TableHead>Original Amount</TableHead>
-              <TableHead>Surcharge (15%)</TableHead>
+              <TableHead>
+                {surchargePercentage === undefined
+                  ? copy.cards.surcharge
+                  : `${copy.cards.surcharge} (${surchargePercentage}%)`}
+              </TableHead>
               <TableHead>Net Refund</TableHead>
               <TableHead>Status</TableHead>
               <TableHead className="text-right">Actions / Date</TableHead>

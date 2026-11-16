@@ -204,8 +204,11 @@ export type Customer = {
   phone?: string;
   country: string;
   applications: number;
-  lifetimeValue: number;
-  currency: string;
+  /**
+   * What this applicant has paid, per currency, across visas and passports.
+   * Never one summed figure: naira plus dollars is not a number.
+   */
+  paidByCurrency: Record<string, number>;
   createdAt: string;
   lastActiveAt: string;
 };

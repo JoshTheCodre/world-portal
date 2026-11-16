@@ -238,13 +238,16 @@ export function toCustomers(
     phone: string | undefined,
     country: string | undefined,
     at: string,
-    spend: number,
+    paid: number,
+    currency: string,
   ) => {
     const key = email.toLowerCase();
     const existing = byEmail.get(key);
     if (existing) {
       existing.applications += 1;
-      existing.lifetimeValue += spend;
+      if (paid > 0) {
+        existing.paidByCurrency[currency] = (existing.paidByCurrency[currency] ?? 0) + paid;
+      }
       if (at > existing.lastActiveAt) existing.lastActiveAt = at;
       if (at < existing.createdAt) existing.createdAt = at;
       existing.phone ??= phone;
@@ -258,8 +261,7 @@ export function toCustomers(
       phone,
       country: country ?? "",
       applications: 1,
-      lifetimeValue: spend,
-      currency: "USD",
+      paidByCurrency: paid > 0 ? { [currency]: paid } : {},
       createdAt: at,
       lastActiveAt: at,
     });
@@ -273,6 +275,7 @@ export function toCustomers(
       visa.nationality,
       visa.createdAt,
       visa.amountPaid,
+      visa.currency || "NGN",
     );
   }
   for (const passport of passports) {
@@ -282,7 +285,8 @@ export function toCustomers(
       passport.applicant.phone,
       passport.stateOfOrigin,
       passport.createdAt,
-      0,
+      passport.amountPaid,
+      passport.currency || "NGN",
     );
   }
 

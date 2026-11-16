@@ -19,6 +19,39 @@ export const login = {
   },
 } as const;
 
+/**
+ * Nothing checks an upload before staff open it, so the viewer must not call
+ * it "verified" — that is the reviewer's call to make.
+ */
+export const documentViewer = {
+  description: "Uploaded by the applicant — not yet reviewed",
+} as const;
+
+/** Detail pages whose record did not load — see `DetailLoadError`. */
+export const detailErrors = {
+  notFoundTitle: (noun: string) => `This ${noun} doesn't exist`,
+  notFoundBody: "The link may be wrong, or the file was removed. Nothing has changed on it.",
+  failedTitle: (noun: string) => `Could not load this ${noun}`,
+  failedBody: "The service didn't answer. Try again in a moment.",
+  retry: "Try again",
+} as const;
+
+/** The console's own error boundary (`app/(admin)/admin/(console)/error.tsx`). */
+export const consoleError = {
+  title: "This page hit a problem",
+  body: "Nothing you entered was saved by this error. Try again — if it keeps happening, note the reference and tell the team.",
+  reference: "Reference",
+  retry: "Try again",
+  home: "Back to overview",
+} as const;
+
+/** `app/(admin)/admin/(console)/not-found.tsx`. */
+export const consoleNotFound = {
+  title: "Page not found",
+  body: "That address isn't part of the console.",
+  home: "Back to overview",
+} as const;
+
 export const overview = {
   headingLead: "Good to see you,",
   body: "Here is what moved across the desk this week.",
@@ -154,6 +187,14 @@ export const finance = {
     refunds: "Refund Requests",
     config: "Fee Settings",
   },
+  cards: {
+    outstandingCaption: "Still owed on evaluated applications",
+    serviceFee: "Service fee",
+    serviceFeeCaption: "As set in Fee Settings",
+    surcharge: "Surcharge",
+  },
+  /** Shown in place of a figure the service did not return — never a guess. */
+  unavailable: "—",
   empty: {
     title: "No financial records found",
     body: "Try adjusting your search query or filters.",

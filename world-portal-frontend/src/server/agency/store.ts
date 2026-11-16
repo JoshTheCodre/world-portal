@@ -318,7 +318,9 @@ export async function updateAgencyVerification(
       ? "rejected"
       : "submitted";
 
-  const agency = agencyRecord(agencyId) ?? db.agencies[0];
+  // Never fall back to another agency: verifying an unknown id used to flip the
+  // first agency in the store instead.
+  const agency = agencyRecord(agencyId);
   if (agency) {
     agency.verification = verificationStatus;
     agency.listingStatus = listingStatus;

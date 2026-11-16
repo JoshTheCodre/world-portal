@@ -23,7 +23,7 @@ import {
 import { customers as copy } from "@/content/admin";
 import { useCustomers } from "@/features/customers/api/use-customers";
 import { useListParams } from "@/hooks/use-list-params";
-import { formatCurrency, formatRelative } from "@/lib/utils";
+import { formatMultiCurrencyInline, formatRelative } from "@/lib/utils";
 
 const COLUMNS = 5;
 
@@ -101,7 +101,7 @@ export function CustomersTable() {
                   {customer.applications}
                 </TableCell>
                 <TableCell className="text-right font-medium tabular-nums">
-                  {formatCurrency(customer.lifetimeValue, customer.currency)}
+                  {formatMultiCurrencyInline(customer.paidByCurrency)}
                 </TableCell>
                 <TableCell className="text-right text-[12.5px] whitespace-nowrap text-muted-foreground">
                   {formatRelative(customer.lastActiveAt)}

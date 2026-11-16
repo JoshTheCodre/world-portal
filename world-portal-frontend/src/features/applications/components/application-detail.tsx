@@ -2,16 +2,15 @@
 
 import Link from "next/link";
 
-import { ArrowLeft, ExternalLink, FileText, Mail } from "lucide-react";
-
+import { ArrowLeft, FileText, Mail } from "lucide-react";
 
 import {
   DetailItem,
   DetailList,
+  DetailLoadError,
   PaymentStatusBadge,
   VisaStatusBadge,
 } from "@/components/admin";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card, CardDescription, CardTitle } from "@/components/ui/card";
 import { Skeleton, SkeletonText } from "@/components/ui/skeleton";
@@ -23,24 +22,20 @@ import { ConfirmBankPaymentModal } from "@/features/applications/components/conf
 import { DocumentViewerModal } from "@/features/applications/components/document-viewer-modal";
 import { EvaluateCostForm } from "@/features/applications/components/evaluate-cost-form";
 import { InviteApplicantModal } from "@/features/applications/components/invite-applicant-modal";
-
-
 import { formatCurrency, formatDate } from "@/lib/utils";
 
 export function ApplicationDetail({ id }: { id: string }) {
-  const { data: application, isPending, isError, error } = useApplication(id);
+  const { data: application, isPending, isError, error, refetch } = useApplication(id);
 
   if (isError) {
     return (
-      <Alert variant="destructive">
-        <AlertTitle>Could not load this application</AlertTitle>
-        <AlertDescription className="flex flex-col items-start gap-3">
-          {error instanceof Error ? error.message : "It may have been removed."}
-          <Button asChild variant="outline" size="sm">
-            <Link href="/admin/applications">Back to applications</Link>
-          </Button>
-        </AlertDescription>
-      </Alert>
+      <DetailLoadError
+        error={error}
+        onRetry={() => void refetch()}
+        backHref="/admin/applications"
+        backLabel="Back to applications"
+        noun="application"
+      />
     );
   }
 
