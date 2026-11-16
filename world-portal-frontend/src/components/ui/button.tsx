@@ -34,6 +34,9 @@ const buttonVariants = cva(
           "border border-border bg-transparent transition-colors hover:bg-secondary",
         ghost: "transition-colors hover:bg-secondary",
         link: "text-foreground underline decoration-current underline-offset-4",
+        /** The one action in a confirmation that can't be taken back. */
+        destructive:
+          "bg-destructive text-destructive-foreground transition-colors hover:bg-destructive/90",
       },
       size: {
         sm: "h-9 rounded-full px-4 text-[13px]",

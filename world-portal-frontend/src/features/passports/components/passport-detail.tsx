@@ -87,7 +87,7 @@ export function PassportDetail({ id }: { id: string }) {
               </span>
             </DetailItem>
             <DetailItem label="Amount Paid">
-              <span className="font-medium text-emerald-600 font-mono">
+              <span className="font-medium text-success-text font-mono">
                 {formatCurrency(record.amountPaid, record.currency)}
               </span>
             </DetailItem>

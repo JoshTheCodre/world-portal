@@ -87,6 +87,19 @@
   --info: var(--cyan-500);
   --info-foreground: #04263a;
 
+  /* Status on tinted surfaces — badges, notices, KPI icon tiles. The fills
+   * above are too light to read as text on white (warning is ~1.6:1), so each
+   * status has a `-text` shade that clears 4.5:1 on --card and on its own
+   * `-wash` in both themes (src/app/__tests__/contrast.test.ts). */
+  --success-text: #11673a;
+  --warning-text: #7a5000;
+  --destructive-text: #b3121a;
+  --info-text: #085f84;
+  --success-wash: color-mix(in oklab, var(--success) 14%, transparent);
+  --warning-wash: color-mix(in oklab, var(--warning) 14%, transparent);
+  --destructive-wash: color-mix(in oklab, var(--destructive) 14%, transparent);
+  --info-wash: color-mix(in oklab, var(--info) 14%, transparent);
+
   --border: var(--ink-200);
   --input: var(--ink-200);
   --ring: var(--brand-600);
@@ -102,6 +115,32 @@
   --chart-2: #2a78d6;
   --chart-3: #e87ba4;
   --chart-grid: var(--ink-200);
+
+  /* The console dashboard's own palette — the colours its charts already
+   * used, moved here unchanged so no component carries a hex value. Every
+   * chart value also has a visible number, so colour is never the only cue. */
+  --chart-visa: var(--brand-600);
+  --chart-passport: var(--cyan-500);
+  --chart-cat-tourist: var(--brand-600);
+  --chart-cat-tourist-to: var(--cyan-500);
+  --chart-cat-business: var(--cyan-500);
+  --chart-cat-business-to: #60a5fa;
+  --chart-cat-student: #8b5cf6;
+  --chart-cat-student-to: #818cf8;
+  --chart-cat-work: #10b981;
+  --chart-cat-work-to: #2dd4bf;
+  --chart-cat-transit: #f59e0b;
+  --chart-cat-transit-to: #facc15;
+  --chart-stage-submitted: #2563eb;
+  --chart-stage-submitted-to: var(--cyan-500);
+  --chart-stage-evaluated: #f59e0b;
+  --chart-stage-evaluated-to: #facc15;
+  --chart-stage-under-review: #9333ea;
+  --chart-stage-under-review-to: #6366f1;
+  --chart-stage-approved: #10b981;
+  --chart-stage-approved-to: #2dd4bf;
+  --chart-stage-rejected: #e11d48;
+  --chart-stage-rejected-to: #ec4899;
 
   /* Glass system — tuned once, consumed by every glass surface */
   --glass-blur: 32px;
@@ -142,6 +181,12 @@
   --muted-foreground: #9aa0a6;
   --accent: var(--cyan-400);
   --accent-foreground: #04263a;
+
+  /* Lifted for the dark surfaces; the washes reuse the fills above. */
+  --success-text: #63d69a;
+  --warning-text: #fcd062;
+  --destructive-text: #ff8a8f;
+  --info-text: #6fd8ff;
 
   --border: rgb(255 255 255 / 12%);
   --input: rgb(255 255 255 / 16%);
@@ -186,6 +231,14 @@
   --color-destructive-foreground: var(--destructive-foreground);
   --color-info: var(--info);
   --color-info-foreground: var(--info-foreground);
+  --color-success-text: var(--success-text);
+  --color-warning-text: var(--warning-text);
+  --color-destructive-text: var(--destructive-text);
+  --color-info-text: var(--info-text);
+  --color-success-wash: var(--success-wash);
+  --color-warning-wash: var(--warning-wash);
+  --color-destructive-wash: var(--destructive-wash);
+  --color-info-wash: var(--info-wash);
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);

@@ -32,7 +32,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { finance as copy } from "@/content/admin";
 import { useFinance } from "@/features/finance/api/use-finance";
 import { useListParams } from "@/hooks/use-list-params";
-import { formatCurrency, formatRelative } from "@/lib/utils";
+import { formatCurrency, formatMultiCurrencyInline, formatRelative } from "@/lib/utils";
 import {
   type BackendPaymentConfig,
   type BackendRefund,
@@ -99,15 +99,6 @@ function MultiCurrencyDisplay({
   );
 }
 
-function formatMultiCurrencyInline(amountsByCurrency?: Record<string, number>, fallbackCurrency = "NGN") {
-  if (!amountsByCurrency) return formatCurrency(0, fallbackCurrency);
-
-  const entries = Object.entries(amountsByCurrency).filter(([_, amt]) => amt > 0);
-  if (entries.length === 0) return formatCurrency(0, fallbackCurrency);
-
-  return entries.map(([cur, amt]) => formatCurrency(amt, cur)).join(" + ");
-}
-
 export function FinanceView() {
   const { params, set } = useListParams();
   const listParams = params as typeof params & { tab?: string };
@@ -128,7 +119,7 @@ export function FinanceView() {
         <Card variant="solid" radius="lg" padding="none" className="p-5">
           <div className="flex items-center justify-between">
             <span className="text-[12.5px] font-medium text-muted-foreground">Total Revenue</span>
-            <span className="grid size-9 place-items-center rounded-xl bg-emerald-500/10 text-emerald-600">
+            <span className="grid size-9 place-items-center rounded-xl bg-success-wash text-success-text">
               <DollarSign className="size-4" />
             </span>
           </div>
@@ -137,7 +128,7 @@ export function FinanceView() {
           ) : (
             <MultiCurrencyDisplay amountsByCurrency={summary?.revenueByCurrency} />
           )}
-          <div className="mt-3 flex items-center gap-1.5 text-xs text-emerald-600 font-medium">
+          <div className="mt-3 flex items-center gap-1.5 text-xs text-success-text font-medium">
             <ArrowUpRight className="size-3.5" />
             <span>Confirmed transactions</span>
           </div>
@@ -146,7 +137,7 @@ export function FinanceView() {
         <Card variant="solid" radius="lg" padding="none" className="p-5">
           <div className="flex items-center justify-between">
             <span className="text-[12.5px] font-medium text-muted-foreground">Outstanding Balance</span>
-            <span className="grid size-9 place-items-center rounded-xl bg-amber-500/10 text-amber-600">
+            <span className="grid size-9 place-items-center rounded-xl bg-warning-wash text-warning-text">
               <Clock className="size-4" />
             </span>
           </div>
@@ -161,7 +152,7 @@ export function FinanceView() {
         <Card variant="solid" radius="lg" padding="none" className="p-5">
           <div className="flex items-center justify-between">
             <span className="text-[12.5px] font-medium text-muted-foreground">Refund Requests</span>
-            <span className="grid size-9 place-items-center rounded-xl bg-purple-500/10 text-purple-600">
+            <span className="grid size-9 place-items-center rounded-xl bg-info-wash text-info-text">
               <RefreshCw className="size-4" />
             </span>
           </div>

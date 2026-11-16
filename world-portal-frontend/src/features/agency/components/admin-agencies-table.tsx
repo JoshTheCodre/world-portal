@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+
 import {
   Building2,
   Calendar,
@@ -17,10 +18,9 @@ import {
   XCircle,
 } from "lucide-react";
 
+import { DataTablePagination } from "@/components/admin/data-table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { DataTablePagination } from "@/components/admin/data-table";
-import { DocumentViewerModal } from "@/features/applications/components/document-viewer-modal";
 import {
   Dialog,
   DialogContent,
@@ -29,9 +29,10 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Textarea } from "@/components/ui/textarea";
+import { DocumentViewerModal } from "@/features/applications/components/document-viewer-modal";
 import { useDebounce } from "@/hooks/use-debounce";
 
 type AgencyRecord = {
@@ -591,12 +592,12 @@ export function AdminAgenciesTable() {
                                   <Button
                                     variant="outline"
                                     size="sm"
-                                    className="h-7 px-2 text-[11px] hover:border-emerald-500 hover:text-emerald-600"
+                                    className="h-7 px-2 text-[11px] hover:border-success hover:text-success-text"
                                     disabled={updatingId === selectedAgency.id || !!updatingDocAction}
                                     isLoading={updatingDocAction?.docId === docIdOrKind && updatingDocAction?.action === "approve"}
                                     onClick={() => handleUpdateDocStatus(selectedAgency.id, docIdOrKind, "APPROVED")}
                                   >
-                                    <CheckCircle2 className="size-3 text-emerald-600 mr-1" />
+                                    <CheckCircle2 className="size-3 text-success-text mr-1" />
                                     Approve
                                   </Button>
                                 )}

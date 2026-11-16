@@ -53,12 +53,12 @@ export function TeamList() {
 
             <span
               className={`inline-flex items-center gap-1.5 text-[11px] font-medium ${
-                member.isActive ? "text-emerald-600" : "text-destructive"
+                member.isActive ? "text-success-text" : "text-destructive"
               }`}
             >
               <span
                 className={`size-1.5 rounded-full ${
-                  member.isActive ? "bg-emerald-500" : "bg-destructive"
+                  member.isActive ? "bg-success" : "bg-destructive"
                 }`}
               />
               {member.isActive ? "Active" : "Deactivated"}

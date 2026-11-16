@@ -2,7 +2,7 @@ import Link from "next/link";
 
 import { ArrowUpRight } from "lucide-react";
 
-import { UserAvatar } from "@/components/admin/user-avatar";
+import { AdminUserCard } from "@/components/admin/admin-user-card";
 import { Logo } from "@/components/common/logo";
 import { AdminNav } from "@/components/layout/admin-nav";
 import type { AdminUser } from "@/types";
@@ -18,7 +18,7 @@ export function AdminSidebar({ user }: { user: AdminUser }) {
       </div>
 
       <div className="mt-8 flex-1 overflow-y-auto pr-1">
-        <AdminNav />
+        <AdminNav role={user.role} />
       </div>
 
       <div className="mt-auto pt-4 border-t border-border/60 flex flex-col gap-3">
@@ -30,14 +30,7 @@ export function AdminSidebar({ user }: { user: AdminUser }) {
           <ArrowUpRight className="size-3.5 transition-transform group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />
         </Link>
 
-        <div className="flex items-center gap-3 rounded-xl border border-border/60 bg-muted/50 p-3">
-
-          <UserAvatar user={user} size="sm" />
-          <div className="min-w-0 flex-1">
-            <p className="truncate text-[13px] font-semibold text-foreground">{user.name}</p>
-            <p className="truncate text-[11px] text-muted-foreground capitalize font-medium">{user.role}</p>
-          </div>
-        </div>
+        <AdminUserCard user={user} />
       </div>
     </aside>
   );

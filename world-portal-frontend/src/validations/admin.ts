@@ -62,12 +62,33 @@ export const evaluateVisaSchema = z.object({
   allowInstallment: z.boolean().optional(),
 });
 
-export const listParamsSchema = z.object({
-  q: z.string().trim().max(80).optional(),
-  status: z.string().trim().max(40).optional(),
-  page: z.coerce.number().int().min(1).default(1),
-  perPage: z.coerce.number().int().min(1).max(100).default(10),
-});
+const isoDay = z
+  .string()
+  .regex(/^\d{4}-\d{2}-\d{2}$/, "Use YYYY-MM-DD")
+  .refine((value) => !Number.isNaN(Date.parse(`${value}T00:00:00Z`)), "Not a real date");
+
+export const listParamsSchema = z
+  .object({
+    q: z.string().trim().max(80).optional(),
+    status: z.string().trim().max(40).optional(),
+    page: z.coerce.number().int().min(1).default(1),
+    perPage: z.coerce.number().int().min(1).max(100).default(10),
+    sort: z
+      .string()
+      .trim()
+      .max(40)
+      .regex(/^[a-zA-Z]+$/)
+      .optional(),
+    dir: z.enum(["asc", "desc"]).optional(),
+    from: isoDay.optional(),
+    to: isoDay.optional(),
+    /** `csv` streams every filtered row instead of a page. */
+    format: z.enum(["json", "csv"]).default("json"),
+  })
+  .refine((p) => !p.from || !p.to || p.from <= p.to, {
+    message: "The start date must be on or before the end date",
+    path: ["to"],
+  });
 
 export const inviteApplicantSchema = z.object({
   purpose: z.string().trim().min(1, "Enter or select the purpose for invitation"),

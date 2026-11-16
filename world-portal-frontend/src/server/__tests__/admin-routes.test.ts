@@ -31,6 +31,7 @@ const professionals = await import("@/app/api/admin/professionals/route");
 const stats = await import("@/app/api/admin/stats/route");
 const finance = await import("@/app/api/admin/finance/route");
 const applications = await import("@/app/api/admin/applications/route");
+const search = await import("@/app/api/admin/search/route");
 
 /** The development default — vitest does not load `.env.local`. */
 const SESSION_SECRET = "world-portal-dev-session-secret";
@@ -294,6 +295,87 @@ describe("/api/admin/finance", () => {
     const response = await finance.GET(get("/api/admin/finance?tab=config"));
 
     expect(response.status).toBe(503);
+  });
+});
+
+/** Just enough of a service visa record for the console's mapper. */
+const visaRecord = (
+  id: string,
+  firstName: string,
+  status: string,
+  createdAt: string,
+) => ({
+  id,
+  applicationNo: `VISA-2026-${id}`,
+  firstName,
+  lastName: "Okafor",
+  email: `${firstName.toLowerCase()}@example.com`,
+  phone: "+234 800 000 0000",
+  targetCountry: "Canada",
+  visaCategory: "TOURIST",
+  status,
+  paymentStatus: "PENDING_EVALUATION",
+  totalAmount: "0",
+  currency: "USD",
+  amountPaid: "0",
+  balanceDue: "0",
+  allowInstallment: false,
+  createdAt,
+  updatedAt: createdAt,
+});
+
+describe("/api/admin/applications", () => {
+  it("returns per-stage counts for the tabs alongside the filtered page", async () => {
+    signInAs("STAFF");
+    routeFetch({
+      "/visa-documentation": () =>
+        ok([
+          visaRecord("1", "Ada", "SUBMITTED", "2026-11-01T10:00:00.000Z"),
+          visaRecord("2", "Bisi", "APPROVED", "2026-11-02T10:00:00.000Z"),
+          visaRecord("3", "Chidi", "SUBMITTED", "2026-11-03T10:00:00.000Z"),
+        ]),
+    });
+
+    const response = await applications.GET(
+      get("/api/admin/applications?status=SUBMITTED&sort=applicant&dir=desc"),
+    );
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body.meta.counts).toEqual({ SUBMITTED: 2, APPROVED: 1 });
+    expect(body.data.map((v: { id: string }) => v.id)).toEqual(["3", "1"]);
+    // Status is filtered here, after counting — not by the service.
+    const [url] = fetchMock.mock.calls[0] as [URL];
+    expect(url.searchParams.has("status")).toBe(false);
+  });
+});
+
+describe("/api/admin/search", () => {
+  it("needs two characters before it asks the service anything", async () => {
+    signInAs("MANAGER");
+
+    const response = await search.GET(get("/api/admin/search?q=a"));
+
+    expect(response.status).toBe(422);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("groups records and applicants without exposing emails", async () => {
+    signInAs("PARTNER");
+    routeFetch({
+      "/visa-documentation": () =>
+        ok([visaRecord("1", "Ada", "SUBMITTED", "2026-11-01T10:00:00.000Z")]),
+      "/passport-application": () => ok([]),
+    });
+
+    const response = await search.GET(get("/api/admin/search?q=ada"));
+    const body = await response.json();
+
+    expect(body.data.visas).toEqual([
+      { id: "1", reference: "VISA-2026-1", name: "Ada Okafor", status: "SUBMITTED" },
+    ]);
+    expect(body.data.applicants).toEqual([{ name: "Ada Okafor", applications: 1 }]);
+    expect(JSON.stringify(body)).not.toContain("@example.com");
   });
 });
 

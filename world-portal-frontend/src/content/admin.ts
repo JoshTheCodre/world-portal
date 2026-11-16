@@ -19,6 +19,103 @@ export const login = {
   },
 } as const;
 
+/** Settings → bank accounts applicants pay into. */
+export const bankAccounts = {
+  loadFailed: "Could not load bank accounts",
+  genericError: "That didn't go through. Try again in a moment.",
+  toggled: (bank: string, active: boolean) =>
+    active ? `${bank} is active — applicants will see it` : `${bank} is hidden from applicants`,
+  deleted: (bank: string) => `${bank} account deleted`,
+  deleteTitle: (bank: string) => `Delete the ${bank} account?`,
+  deleteBody:
+    "Applicants will stop seeing it in payment emails and on the tracking page straight away. This can't be undone — to hide it for a while, deactivate it instead.",
+  deleteConfirm: "Delete account",
+} as const;
+
+export const agencies = {
+  metaTitle: "Agencies",
+  headingLead: "Agency",
+  headingAccent: "verification.",
+  body: "Registered partner agencies: check their paperwork, review what they offer, and decide who goes live.",
+} as const;
+
+export const professionals = {
+  metaTitle: "Professionals",
+  headingLead: "Professional",
+  headingAccent: "moderation.",
+  body: "Destination professionals listed on Hire: verify identity and qualifications before their profile shows a badge.",
+} as const;
+
+/** Dashboard charts (`features/dashboard/components/*`). */
+export const chartCopy = {
+  showTable: "Show as a table",
+  visas: "Visas",
+  passports: "Passports",
+  day: "Day",
+  category: "Category",
+  stage: "Stage",
+  count: "Count",
+  share: "Share",
+  weeklyEmpty: "No applications in the last seven days.",
+  categoriesEmpty: "No visa applications yet.",
+  pipelineEmpty: "Nothing in the pipeline yet.",
+  weeklyCaption: "Applications per day over the last seven days",
+  categoriesCaption: "Visa applications by category",
+  pipelineCaption: "Visa applications by stage",
+} as const;
+
+/** Shared list controls (`components/admin/list-controls.tsx`, `admin-data-table.tsx`). */
+export const listControls = {
+  all: "All",
+  from: "Submitted from",
+  to: "Submitted to",
+  export: "Export CSV",
+  columns: "Columns",
+  columnsLabel: "Show columns",
+  selectAll: "Select all on this page",
+  selectRow: (name: string) => `Select ${name}`,
+  selected: (n: number) => `${n} selected`,
+  exportSelected: "Export selected",
+  copyReferences: "Copy references",
+  copied: (n: number) => `${n} reference${n === 1 ? "" : "s"} copied`,
+  clear: "Clear",
+  rowActions: "Actions",
+  open: "Open",
+  quickView: "Quick view",
+  copyReference: "Copy reference",
+  referenceCopied: "Reference copied",
+  openFull: "Open full record",
+  sortBy: (column: string) => `Sort by ${column}`,
+} as const;
+
+/** The ⌘K palette in the topbar (`components/admin/command-palette.tsx`). */
+export const commandPalette = {
+  trigger: "Search…",
+  label: "Search the console",
+  placeholder: "Search references, names, pages…",
+  groups: {
+    recent: "Recent",
+    pages: "Go to",
+    visas: "Visa applications",
+    passports: "Passport applications",
+    applicants: "Applicants",
+  },
+  applicantHint: (count: number) => `${count} application${count === 1 ? "" : "s"}`,
+  typeMore: "Type two or more characters to search applications and applicants.",
+  searching: "Searching…",
+  failed: "Search is unavailable right now. Try again in a moment.",
+  noMatches: (q: string) => `Nothing matches “${q}”.`,
+  footer: "↑↓ to move · Enter to open · Esc to close",
+} as const;
+
+/** `RoleGate` — a page this role can't use explains itself instead of failing. */
+export const roleGate = {
+  title: "This page isn't available to your role",
+  body: (role: string, needs: string) =>
+    `You're signed in as ${role}. This page needs ${needs}. Ask a manager if you need access.`,
+  back: "Go to your home page",
+} as const;
+
 /**
  * Nothing checks an upload before staff open it, so the viewer must not call
  * it "verified" — that is the reviewer's call to make.
@@ -61,7 +158,25 @@ export const overview = {
     customers: "Applicants",
     revenue: "Collected",
   },
-  recent: { title: "Latest visa applications", cta: "View all" },
+  recent: {
+    title: "Latest visa applications",
+    cta: "View all",
+    emptyTitle: "No applications yet",
+    emptyBody: "Submissions from the site land here.",
+  },
+  loadFailed: "Could not load the dashboard",
+  /** Triage tiles: each count opens the queue behind it. */
+  attention: {
+    title: "Needs attention",
+    awaitingEvaluation: "Awaiting a price",
+    awaitingEvaluationHint: "Submitted, not yet evaluated",
+    awaitingPayment: "Awaiting payment",
+    awaitingPaymentHint: "Priced, payment not confirmed",
+    underReview: "Under review",
+    underReviewHint: "Paid, waiting for a decision",
+    open: "Open queue",
+  },
+  viewList: "View list",
   pipeline: { title: "Visa pipeline", body: "Applications by stage" },
   services: { title: "Visas by category" },
   weekly: { title: "Last seven days" },
@@ -140,6 +255,8 @@ export const customers = {
     title: "No applicants match",
     body: "Try a different search.",
   },
+  copyEmails: "Copy emails",
+  emailsCopied: (n: number) => `${n} email${n === 1 ? "" : "s"} copied`,
 } as const;
 
 export const settings = {

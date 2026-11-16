@@ -1,7 +1,9 @@
 "use client";
 
 import * as React from "react";
+
 import { Calendar, Mail, Send } from "lucide-react";
+
 import { Button } from "@/components/ui/button";
 import { Card, CardDescription, CardTitle } from "@/components/ui/card";
 import {
@@ -23,8 +25,9 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "@/components/ui/toaster";
-import { useInviteApplicant } from "../api/use-invite-applicant";
 import { useInvitePassportApplicant } from "@/features/passports/api/use-invite-passport";
+
+import { useInviteApplicant } from "../api/use-invite-applicant";
 
 type Props = {
   id: string;
@@ -135,9 +138,9 @@ export function InviteApplicantModal({
       variant="solid"
       radius="lg"
       padding="none"
-      className="p-6 border-blue-500/30 bg-blue-500/5"
+      className="p-6 border-info/30 bg-info-wash"
     >
-      <div className="flex items-center gap-2.5 text-blue-600 dark:text-blue-400">
+      <div className="flex items-center gap-2.5 text-info-text">
         <Calendar className="size-5 shrink-0" />
         <CardTitle className="text-base font-semibold">
           Applicant Appointment Invitation
@@ -148,7 +151,7 @@ export function InviteApplicantModal({
         or document verification.
       </CardDescription>
 
-      <div className="mt-4 flex items-center justify-between gap-3 border-t border-blue-500/20 pt-4">
+      <div className="mt-4 flex items-center justify-between gap-3 border-t border-info/20 pt-4">
         <span className="text-xs text-muted-foreground">
           Dispatches email notification with venue & time details.
         </span>
@@ -158,7 +161,7 @@ export function InviteApplicantModal({
             <Button
               size="sm"
               variant="primary"
-              className="gap-1.5 bg-blue-600 hover:bg-blue-700 text-white font-medium shrink-0"
+              className="gap-1.5 bg-primary hover:bg-primary-hover text-primary-foreground font-medium shrink-0"
             >
               <Mail className="size-4" />
               Invite Applicant
@@ -168,7 +171,7 @@ export function InviteApplicantModal({
           <DialogContent className="max-w-md p-6 backdrop-blur-2xl">
             <DialogHeader className="border-b border-border/60 pb-4">
               <DialogTitle className="text-base font-semibold flex items-center gap-2">
-                <Calendar className="size-4 text-blue-600" />
+                <Calendar className="size-4 text-info-text" />
                 Invite Applicant for Appointment
               </DialogTitle>
               <DialogDescription className="text-xs text-muted-foreground mt-0.5">
@@ -283,7 +286,7 @@ export function InviteApplicantModal({
                   size="sm"
                   isLoading={inviteMutation.isPending}
                   loadingText="Sending..."
-                  className="bg-blue-600 hover:bg-blue-700 text-white gap-1.5"
+                  className="bg-primary hover:bg-primary-hover text-primary-foreground gap-1.5"
                 >
                   <Send className="size-3.5" />
                   Send Invitation

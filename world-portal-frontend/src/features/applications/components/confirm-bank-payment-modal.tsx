@@ -1,7 +1,9 @@
 "use client";
 
 import * as React from "react";
-import { CreditCard, CheckCircle2, ShieldCheck } from "lucide-react";
+
+import { CheckCircle2, CreditCard, ShieldCheck } from "lucide-react";
+
 import { Button } from "@/components/ui/button";
 import { Card, CardDescription, CardTitle } from "@/components/ui/card";
 import {
@@ -16,6 +18,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { formatCurrency, formatWithCommas } from "@/lib/utils";
+
 import { useConfirmBankPayment } from "../api/use-confirm-bank-payment";
 
 type Props = {
@@ -103,8 +106,8 @@ export function ConfirmBankPaymentModal({
   }
 
   return (
-    <Card variant="solid" radius="lg" padding="none" className="p-6 border-emerald-500/30 bg-emerald-500/5">
-      <div className="flex items-center gap-2.5 text-emerald-600 dark:text-emerald-400">
+    <Card variant="solid" radius="lg" padding="none" className="p-6 border-success/30 bg-success-wash">
+      <div className="flex items-center gap-2.5 text-success-text">
         <CreditCard className="size-5 shrink-0" />
         <CardTitle className="text-base font-semibold">Bank Transfer Confirmation</CardTitle>
       </div>
@@ -112,7 +115,7 @@ export function ConfirmBankPaymentModal({
         Manually record and verify bank wire / transfer payments received from this applicant.
       </CardDescription>
 
-      <div className="mt-4 flex items-center justify-between gap-3 border-t border-emerald-500/20 pt-4">
+      <div className="mt-4 flex items-center justify-between gap-3 border-t border-success/20 pt-4">
         <div>
           <span className="text-[11px] font-medium text-muted-foreground uppercase block">Balance Outstanding</span>
           <span className="font-mono text-base font-bold text-ink-900">{formatCurrency(balanceDue, currency)}</span>
@@ -120,7 +123,7 @@ export function ConfirmBankPaymentModal({
 
         <Dialog open={open} onOpenChange={setOpen}>
           <DialogTrigger asChild>
-            <Button size="sm" variant="primary" className="gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-medium">
+            <Button size="sm" variant="primary" className="gap-1.5 bg-success hover:bg-success/90 text-success-foreground font-medium">
               <CheckCircle2 className="size-4" />
               Confirm Bank Payment
             </Button>
@@ -129,7 +132,7 @@ export function ConfirmBankPaymentModal({
           <DialogContent className="max-w-md p-6 backdrop-blur-2xl">
             <DialogHeader className="border-b border-border/60 pb-4">
               <DialogTitle className="text-base font-semibold flex items-center gap-2">
-                <ShieldCheck className="size-4 text-emerald-600" />
+                <ShieldCheck className="size-4 text-success-text" />
                 Confirm Bank Transfer Payment
               </DialogTitle>
               <DialogDescription className="text-xs text-muted-foreground mt-0.5">
@@ -153,7 +156,7 @@ export function ConfirmBankPaymentModal({
                     onClick={() => handleOptionChange("FULL")}
                     className={`rounded-xl border p-3 text-left transition-all ${
                       option === "FULL"
-                        ? "border-emerald-500 bg-emerald-500/10 ring-1 ring-emerald-500"
+                        ? "border-success bg-success-wash ring-1 ring-success"
                         : "border-border/70 bg-card hover:bg-muted/30"
                     }`}
                   >
@@ -169,7 +172,7 @@ export function ConfirmBankPaymentModal({
                       onClick={() => handleOptionChange("HALF_INSTALLMENT")}
                       className={`rounded-xl border p-3 text-left transition-all ${
                         option === "HALF_INSTALLMENT"
-                          ? "border-emerald-500 bg-emerald-500/10 ring-1 ring-emerald-500"
+                          ? "border-success bg-success-wash ring-1 ring-success"
                           : "border-border/70 bg-card hover:bg-muted/30"
                       }`}
                     >
@@ -249,7 +252,7 @@ export function ConfirmBankPaymentModal({
                   variant="primary"
                   size="sm"
                   isLoading={confirmMutation.isPending}
-                  className="bg-emerald-600 hover:bg-emerald-700 text-white"
+                  className="bg-success hover:bg-success/90 text-success-foreground"
                 >
                   Confirm Payment
                 </Button>
