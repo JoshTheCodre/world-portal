@@ -10,12 +10,19 @@ import { toAmount } from "@/server/data/backend-types";
 
 const FALLBACK_CURRENCY = "NGN";
 
-type MoneyRecord = { currency?: string | null; amountPaid: number; balanceDue: number };
+type MoneyRecord = {
+  id?: string;
+  currency?: string | null;
+  amountPaid: number;
+  balanceDue: number;
+};
 
 /** A transaction row as `/payments/transactions` returns it (relations included). */
 export type RawTransaction = {
   amount: string | number;
   status: string;
+  visaDocumentationId?: string | null;
+  passportApplicationId?: string | null;
   currency?: string | null;
   visaDocumentation?: { currency?: string | null } | null;
   passportApplication?: { currency?: string | null } | null;
@@ -43,23 +50,31 @@ function add(totals: Record<string, number>, currency: string, amount: number) {
 }
 
 /**
- * Collected = confirmed transactions. Applications whose payments predate the
- * transaction ledger only carry `amountPaid`, so when the ledger is empty those
- * are used instead — real recorded amounts, never an estimate.
+ * Collected = confirmed transactions, plus the `amountPaid` of applications
+ * that have no transactions at all: their payments predate the ledger. Real
+ * recorded amounts, never an estimate.
+ *
+ * The fallback is per application. It used to apply only while the whole
+ * ledger was empty, so the first transaction ever recorded made every older
+ * payment drop out of "collected". An application with any ledger entry is
+ * counted from the ledger alone: before ADR 0016, refunds didn't lower its
+ * `amountPaid`, so the ledger is the truer of the two.
  */
 export function collectedByCurrency(
   transactions: RawTransaction[],
   applications: MoneyRecord[],
 ) {
   const totals: Record<string, number> = {};
+  const onLedger = new Set<string>();
   for (const tx of transactions) {
+    const applicationId = tx.visaDocumentationId ?? tx.passportApplicationId;
+    if (applicationId) onLedger.add(applicationId);
     if (tx.status === "CONFIRMED")
       add(totals, transactionCurrency(tx), toAmount(tx.amount));
   }
-  if (Object.keys(totals).length === 0) {
-    for (const app of applications) {
-      add(totals, app.currency || FALLBACK_CURRENCY, app.amountPaid);
-    }
+  for (const app of applications) {
+    if (app.id && onLedger.has(app.id)) continue;
+    add(totals, app.currency || FALLBACK_CURRENCY, app.amountPaid);
   }
   return totals;
 }

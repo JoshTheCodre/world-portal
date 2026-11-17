@@ -22,7 +22,7 @@ type ProfessionalRow = {
   title: string;
   category: string;
   bio?: string | null;
-  city: string;
+  // The service's profile has a country but no city.
   country: string;
   isVerified: boolean;
   createdAt: string;
@@ -42,7 +42,6 @@ const spec: ListSpec<ProfessionalRow> = {
       { header: "Name", value: (pro) => pro.name },
       { header: "Title", value: (pro) => pro.title },
       { header: "Category", value: (pro) => pro.category },
-      { header: "City", value: (pro) => pro.city },
       { header: "Country", value: (pro) => pro.country },
       { header: "Verified", value: (pro) => (pro.isVerified ? "Yes" : "No") },
     ],
@@ -80,8 +79,8 @@ export async function GET(request: Request) {
       (pro) =>
         (!category.data || pro.category === category.data) &&
         (!q ||
-          [pro.name, pro.title, pro.city, pro.country, pro.bio ?? ""].some((field) =>
-            field.toLowerCase().includes(q),
+          [pro.name, pro.title, pro.country, pro.bio].some((field) =>
+            (field ?? "").toLowerCase().includes(q),
           )),
     );
     return listResponse(rows, params, spec);

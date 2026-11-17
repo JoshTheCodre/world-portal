@@ -163,7 +163,7 @@ describe("/api/admin/professionals", () => {
       title: "Photographer",
       category,
       bio: null,
-      city: "Lisbon",
+      // The service's ProfessionalProfile has no city.
       country: "Portugal",
       isVerified,
       createdAt: "2026-01-01T00:00:00.000Z",
@@ -196,6 +196,36 @@ describe("/api/admin/professionals", () => {
     );
   });
 
+  it("searches past the name and title without a city to trip over", async () => {
+    signInAs("STAFF");
+    routeFetch({
+      "/hire/professionals/admin": () =>
+        ok({
+          data: [
+            {
+              id: "pro_1",
+              name: "Ada Okafor",
+              title: "Photographer",
+              category: "photographer",
+              bio: null,
+              country: "Portugal",
+              isVerified: true,
+              createdAt: "2026-01-01T00:00:00.000Z",
+            },
+          ],
+          meta: {},
+        }),
+    });
+
+    const response = await professionals.GET(
+      get("/api/admin/professionals?q=portugal"),
+    );
+
+    expect(response.status).toBe(200);
+    const body = (await response.json()) as { data: { id: string }[] };
+    expect(body.data.map((p) => p.id)).toEqual(["pro_1"]);
+  });
+
   it("filters by verification", async () => {
     signInAs("STAFF");
     routeFetch({
@@ -207,7 +237,6 @@ describe("/api/admin/professionals", () => {
               name: "A",
               title: "",
               category: "chef",
-              city: "",
               country: "",
               isVerified: true,
               createdAt: "2026-01-02T00:00:00.000Z",
@@ -217,7 +246,6 @@ describe("/api/admin/professionals", () => {
               name: "B",
               title: "",
               category: "chef",
-              city: "",
               country: "",
               isVerified: false,
               createdAt: "2026-01-01T00:00:00.000Z",

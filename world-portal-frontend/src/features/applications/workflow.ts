@@ -32,13 +32,16 @@ export function canMove(from: CaseStatus, to: CaseStatus) {
 }
 
 /**
- * Whether the cost can still be set. While the applicant has money paid in,
- * the price is fixed, and a file past evaluation is not re-priced (ADR 0016).
- * A refunded file can be priced again.
+ * Whether the cost can still be set (ADR 0016, mirrored by the service).
+ * While the applicant has money paid in, the price is fixed; once a decision
+ * is made it's closed. A file under review with nothing held can be priced:
+ * its review was started before pricing, or its payment was refunded.
+ * Without that, Start review on an unpriced file left it with no way to be
+ * paid for.
  */
 export function canEvaluate(status: CaseStatus, paymentStatus: BackendPaymentStatus) {
-  const openStage = status === "SUBMITTED" || status === "EVALUATED";
+  const decided = status === "APPROVED" || status === "REJECTED";
   const moneyHeld =
     paymentStatus === "PARTIALLY_PAID" || paymentStatus === "FULLY_PAID";
-  return openStage && !moneyHeld;
+  return !decided && !moneyHeld;
 }

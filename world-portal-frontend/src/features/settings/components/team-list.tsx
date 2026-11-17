@@ -124,8 +124,11 @@ export function TeamList({
 
   const resendInvite = async (member: TeamMember) => {
     try {
-      await resend.mutateAsync(member.id);
-      toast.success(copy.inviteResent(member.email));
+      const { data } = await resend.mutateAsync(member.id);
+      // The service answers 200 with `sent: false` when no email went out
+      // (SendGrid unset or refusing). Saying "sent" then was untrue.
+      if (data.sent) toast.success(copy.inviteResent(member.email));
+      else toast.error(copy.inviteNotSent(member.email));
     } catch (err) {
       toast.error(errorMessage(err));
     }

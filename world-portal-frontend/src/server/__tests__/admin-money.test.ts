@@ -11,7 +11,13 @@ import {
 import { paginate } from "@/server/http";
 import type { PassportApplication, VisaApplication } from "@/types";
 
-const app = (currency: string, amountPaid: number, balanceDue: number) => ({
+const app = (
+  currency: string,
+  amountPaid: number,
+  balanceDue: number,
+  id?: string,
+) => ({
+  id,
   currency,
   amountPaid,
   balanceDue,
@@ -41,22 +47,63 @@ describe("money figures", () => {
   it("counts only confirmed transactions as collected, kept per currency", () => {
     const totals = collectedByCurrency(
       [
-        { amount: "100.00", status: "CONFIRMED", currency: "USD" },
-        { amount: "40.00", status: "CONFIRMED", currency: "USD" },
+        {
+          amount: "100.00",
+          status: "CONFIRMED",
+          currency: "USD",
+          visaDocumentationId: "v1",
+        },
+        {
+          amount: "40.00",
+          status: "CONFIRMED",
+          currency: "USD",
+          visaDocumentationId: "v1",
+        },
         { amount: "9000", status: "CONFIRMED", currency: "NGN" },
-        { amount: "500.00", status: "INITIATED", currency: "USD" },
-        { amount: "75.00", status: "REFUNDED", currency: "USD" },
+        {
+          amount: "500.00",
+          status: "INITIATED",
+          currency: "USD",
+          visaDocumentationId: "v1",
+        },
+        {
+          amount: "75.00",
+          status: "REFUNDED",
+          currency: "USD",
+          visaDocumentationId: "v1",
+        },
       ],
-      [app("USD", 999, 0)],
+      // On the ledger, so its own amountPaid is not counted again.
+      [app("USD", 999, 0, "v1")],
     );
 
     expect(totals).toEqual({ USD: 140, NGN: 9000 });
   });
 
-  it("falls back to recorded payments only when there is no ledger at all", () => {
-    expect(collectedByCurrency([], [app("USD", 300, 0), app("NGN", 0, 10)])).toEqual({
-      USD: 300,
-    });
+  it("falls back to recorded payments when there is no ledger at all", () => {
+    expect(
+      collectedByCurrency([], [app("USD", 300, 0, "v1"), app("NGN", 0, 10, "v2")]),
+    ).toEqual({ USD: 300 });
+  });
+
+  it("keeps older payments once the first transaction is recorded", () => {
+    // Twenty files paid before the ledger existed, then one bank transfer.
+    const older = Array.from({ length: 20 }, (_, i) =>
+      app("NGN", 100_000, 0, `old-${i}`),
+    );
+    const totals = collectedByCurrency(
+      [
+        {
+          amount: "10000",
+          status: "CONFIRMED",
+          currency: "NGN",
+          passportApplicationId: "new-1",
+        },
+      ],
+      [...older, app("USD", 50, 0, "usd-old"), app("NGN", 10_000, 0, "new-1")],
+    );
+
+    expect(totals).toEqual({ NGN: 2_010_000, USD: 50 });
   });
 
   it("treats outstanding as what applicants still owe — not money already received", () => {

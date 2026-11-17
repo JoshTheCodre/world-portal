@@ -78,7 +78,11 @@ describe("POST /api/passport-enquiry", () => {
 
     expect(response.status).toBe(503);
     expect(body.data).toBeUndefined();
-    expect(body.message).toMatch(/nothing was submitted/i);
+    // A 500 or a lost reply can come after the service filed it: the
+    // applicant is told to check for the confirmation email, not that
+    // nothing was submitted, so a retry doesn't file them twice.
+    expect(body.message).not.toMatch(/nothing was submitted/i);
+    expect(body.message).toMatch(/check your email/i);
   });
 
   it("reports an unreachable service the same way", async () => {

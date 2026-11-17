@@ -21,6 +21,7 @@ import { ConfirmBankPaymentModal } from "@/features/applications/components/conf
 import { DocumentViewerModal } from "@/features/applications/components/document-viewer-modal";
 import { EvaluateCostForm } from "@/features/applications/components/evaluate-cost-form";
 import { InviteApplicantModal } from "@/features/applications/components/invite-applicant-modal";
+import { ReadOnlyCaseNote } from "@/features/applications/components/read-only-case-note";
 import { StatusActions } from "@/features/applications/components/status-actions";
 import { cn, formatCurrency, formatDate } from "@/lib/utils";
 
@@ -36,7 +37,8 @@ function passportExpiresSoon(expiry: string, returnDate: string) {
   return expires < back + sixMonths;
 }
 
-export function ApplicationDetail({ id }: { id: string }) {
+/** `canAct`: the signed-in role may work the desk (MANAGER or STAFF). */
+export function ApplicationDetail({ id, canAct }: { id: string; canAct: boolean }) {
   const { data: application, isPending, isError, error, refetch } = useApplication(id);
 
   if (isError) {
@@ -245,46 +247,50 @@ export function ApplicationDetail({ id }: { id: string }) {
           </div>
         </Card>
 
-        <div className="flex flex-col gap-4">
-          <Card variant="solid" radius="lg" padding="none" className="p-6">
-            <StatusActions
-              type="visa"
-              id={id}
-              status={application.status}
-              reference={application.reference}
-              applicantName={application.applicant.name}
-            />
-          </Card>
+        {canAct ? (
+          <div className="flex flex-col gap-4">
+            <Card variant="solid" radius="lg" padding="none" className="p-6">
+              <StatusActions
+                type="visa"
+                id={id}
+                status={application.status}
+                reference={application.reference}
+                applicantName={application.applicant.name}
+              />
+            </Card>
 
-          <Card variant="solid" radius="lg" padding="none" className="gap-4 p-6">
-            <CardTitle className="text-base">{copy.detail.evaluate}</CardTitle>
-            <EvaluateCostForm
+            <Card variant="solid" radius="lg" padding="none" className="gap-4 p-6">
+              <CardTitle className="text-base">{copy.detail.evaluate}</CardTitle>
+              <EvaluateCostForm
+                id={id}
+                totalAmount={application.totalAmount}
+                currency={application.currency}
+                allowInstallment={application.allowInstallment}
+                status={application.status}
+                paymentStatus={application.paymentStatus}
+                applicantName={application.applicant.name}
+              />
+            </Card>
+
+            <ConfirmBankPaymentModal
               id={id}
               totalAmount={application.totalAmount}
+              amountPaid={application.amountPaid}
+              balanceDue={application.balanceDue}
               currency={application.currency}
               allowInstallment={application.allowInstallment}
-              status={application.status}
-              paymentStatus={application.paymentStatus}
-              applicantName={application.applicant.name}
             />
-          </Card>
 
-          <ConfirmBankPaymentModal
-            id={id}
-            totalAmount={application.totalAmount}
-            amountPaid={application.amountPaid}
-            balanceDue={application.balanceDue}
-            currency={application.currency}
-            allowInstallment={application.allowInstallment}
-          />
-
-          <InviteApplicantModal
-            id={id}
-            applicantName={application.applicant.name}
-            applicantEmail={application.applicant.email}
-            status={application.status}
-          />
-        </div>
+            <InviteApplicantModal
+              id={id}
+              applicantName={application.applicant.name}
+              applicantEmail={application.applicant.email}
+              status={application.status}
+            />
+          </div>
+        ) : (
+          <ReadOnlyCaseNote />
+        )}
       </div>
     </div>
   );

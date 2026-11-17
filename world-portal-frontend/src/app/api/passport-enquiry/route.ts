@@ -94,17 +94,20 @@ export async function POST(request: Request) {
         { status: err.status },
       );
     }
-    // The service is down or failed, so nothing was filed. Say so and let the
-    // applicant retry: a locally invented reference here told them they had
-    // applied when the console would never see the application.
+    // The outcome is unknown: the service may be down, or it may have filed
+    // the application and failed (or timed out) before answering. Never
+    // invent a reference (the console would never see that application),
+    // and never promise "nothing was submitted": a retry after a lost reply
+    // files the same person twice. The service emails a confirmation when
+    // it files one, so that is what to check before trying again.
     console.warn(
-      "[passport-application] not filed:",
+      "[passport-application] outcome unknown:",
       err instanceof Error ? err.message : err,
     );
     return NextResponse.json(
       {
         message:
-          "We couldn't file your application just now. Nothing was submitted — please try again in a few minutes.",
+          "We couldn't confirm your application went through. Check your email for a confirmation from E-Embassy before you try again, so it isn't filed twice. If nothing arrives within an hour, try again.",
       },
       { status: 503 },
     );

@@ -74,12 +74,11 @@ export function listResponse<T>(rows: T[], query: ListQuery, spec: ListSpec<T>) 
       ? dated.filter((row) => spec.statusOf?.(row) === query.status)
       : dated;
 
-  const key =
-    query.sort && spec.sorters[query.sort] ? query.sort : spec.defaultSort.key;
-  const dir =
-    query.sort && spec.sorters[query.sort]
-      ? (query.dir ?? "asc")
-      : spec.defaultSort.dir;
+  // Own keys only: `sorters[sort]` alone let `?sort=valueOf` (or any other
+  // Object.prototype name) through as a comparator, which threw a 500.
+  const known = Boolean(query.sort && Object.hasOwn(spec.sorters, query.sort));
+  const key = known && query.sort ? query.sort : spec.defaultSort.key;
+  const dir = known ? (query.dir ?? "asc") : spec.defaultSort.dir;
   const compare = spec.sorters[key];
   const sorted = compare
     ? [...filtered].sort((a, b) => (dir === "asc" ? compare(a, b) : compare(b, a)))
@@ -87,7 +86,9 @@ export function listResponse<T>(rows: T[], query: ListQuery, spec: ListSpec<T>) 
 
   if (query.format === "csv") {
     const stamp = new Date().toISOString().slice(0, 10);
-    return new NextResponse(toCsv(sorted, spec.csv.columns), {
+    // The BOM makes Excel read UTF-8 names (Ọlá, Müller) correctly, as the
+    // browser-side download in `lib/csv.ts` already does.
+    return new NextResponse(`﻿${toCsv(sorted, spec.csv.columns)}`, {
       headers: {
         "Content-Type": "text/csv; charset=utf-8",
         "Content-Disposition": `attachment; filename="${spec.csv.filename}-${stamp}.csv"`,

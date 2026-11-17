@@ -125,13 +125,22 @@ describe("case transitions", () => {
     expect(canMove("APPROVED", "SUBMITTED")).toBe(false);
   });
 
-  it("only lets the cost change before money is held", () => {
+  it("only lets the cost change while no money is held and nothing is decided", () => {
     expect(canEvaluate("SUBMITTED", "PENDING_EVALUATION")).toBe(true);
     expect(canEvaluate("EVALUATED", "AWAITING_PAYMENT")).toBe(true);
     expect(canEvaluate("EVALUATED", "REFUNDED")).toBe(true);
     expect(canEvaluate("EVALUATED", "PARTIALLY_PAID")).toBe(false);
     expect(canEvaluate("EVALUATED", "FULLY_PAID")).toBe(false);
-    expect(canEvaluate("UNDER_REVIEW", "AWAITING_PAYMENT")).toBe(false);
+    expect(canEvaluate("UNDER_REVIEW", "FULLY_PAID")).toBe(false);
+    expect(canEvaluate("APPROVED", "PENDING_EVALUATION")).toBe(false);
+    expect(canEvaluate("REJECTED", "REFUNDED")).toBe(false);
+  });
+
+  it("can still price a file whose review started first, or whose payment was refunded", () => {
+    // Start review is offered on an unpriced file; without this it could never be paid for.
+    expect(canMove("SUBMITTED", "UNDER_REVIEW")).toBe(true);
+    expect(canEvaluate("UNDER_REVIEW", "PENDING_EVALUATION")).toBe(true);
+    expect(canEvaluate("UNDER_REVIEW", "REFUNDED")).toBe(true);
   });
 });
 

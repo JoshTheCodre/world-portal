@@ -88,6 +88,14 @@ describe("list engine", () => {
     expect(body.data.map((r) => r.id)).toEqual(["c", "b", "a"]);
   });
 
+  it.each(["valueOf", "hasOwnProperty", "isPrototypeOf", "toString"])(
+    "ignores ?sort=%s instead of calling an Object.prototype method",
+    async (sort) => {
+      const body = await json(listResponse(rows, query({ sort }), spec));
+      expect(body.data.map((r) => r.id)).toEqual(["c", "b", "a"]);
+    },
+  );
+
   it("counts every status before the status filter, so each tab shows its true count", async () => {
     const body = await json(listResponse(rows, query({ status: "APPROVED" }), spec));
     expect(body.data.map((r) => r.id)).toEqual(["b"]);
@@ -112,6 +120,9 @@ describe("list engine", () => {
     expect(response.headers.get("Content-Disposition")).toMatch(
       /attachment; filename="rows-\d{4}-\d{2}-\d{2}\.csv"/,
     );
+    const bytes = new Uint8Array(await response.clone().arrayBuffer());
+    // A UTF-8 BOM first, so Excel reads accented names; text() strips it.
+    expect([...bytes.slice(0, 3)]).toEqual([0xef, 0xbb, 0xbf]);
     expect(await response.text()).toBe("Name,Amount\r\nBisi,20\r\nChidi,30\r\n");
   });
 

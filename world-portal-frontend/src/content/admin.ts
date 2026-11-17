@@ -54,6 +54,8 @@ export const team = {
   deactivatedToast: (name: string) => `${name} has been deactivated`,
   resendInvite: "Resend invite",
   inviteResent: (email: string) => `Invite sent again to ${email}`,
+  inviteNotSent: (email: string) =>
+    `The invite to ${email} wasn't sent. Email may not be set up yet. Try again later, or give them the sign-in link yourself.`,
   genericError: "That didn't go through. Try again in a moment.",
   invite: {
     trigger: "Invite team member",
@@ -384,11 +386,13 @@ export const passports = {
 /** Status changes and pricing on a visa or passport file (`status-actions.tsx`, `evaluate-cost-form.tsx`). */
 export const caseWorkflow = {
   title: "Next step",
+  readOnly:
+    "Staff price this file, record payments and move it to the next stage. You'll see each step here as it happens.",
   current: "Current stage",
   final: (stage: string) =>
     `This file is ${stage.toLowerCase()}. That's final, so there are no further steps.`,
   waitingForCost:
-    "Set the cost first, or start the review if it's already been paid offline.",
+    "Set the cost so the applicant can pay. You can also start the review now and set the cost later.",
   actions: {
     UNDER_REVIEW: "Start review",
     APPROVED: "Approve",

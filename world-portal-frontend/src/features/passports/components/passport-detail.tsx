@@ -20,11 +20,13 @@ import { ConfirmBankPaymentModal } from "@/features/applications/components/conf
 import { DocumentViewerModal } from "@/features/applications/components/document-viewer-modal";
 import { EvaluateCostForm } from "@/features/applications/components/evaluate-cost-form";
 import { InviteApplicantModal } from "@/features/applications/components/invite-applicant-modal";
+import { ReadOnlyCaseNote } from "@/features/applications/components/read-only-case-note";
 import { StatusActions } from "@/features/applications/components/status-actions";
 import { usePassport } from "@/features/passports/api/use-passport";
 import { formatCurrency, formatDate, formatRelative } from "@/lib/utils";
 
-export function PassportDetail({ id }: { id: string }) {
+/** `canAct`: the signed-in role may work the desk (MANAGER or STAFF). */
+export function PassportDetail({ id, canAct }: { id: string; canAct: boolean }) {
   const { data: record, isPending, isError, error, refetch } = usePassport(id);
 
   if (isError) {
@@ -310,52 +312,58 @@ export function PassportDetail({ id }: { id: string }) {
         </Card>
 
         {/* Action Sidebar */}
-        <div className="flex flex-col gap-4">
-          <Card variant="solid" radius="lg" padding="none" className="p-6">
-            <StatusActions
-              type="passport"
-              id={id}
-              status={record.status}
-              reference={record.reference}
-              applicantName={record.applicant.name}
-            />
-          </Card>
+        {canAct ? (
+          <div className="flex flex-col gap-4">
+            <Card variant="solid" radius="lg" padding="none" className="p-6">
+              <StatusActions
+                type="passport"
+                id={id}
+                status={record.status}
+                reference={record.reference}
+                applicantName={record.applicant.name}
+              />
+            </Card>
 
-          {/* Fee Evaluation Form */}
-          <Card variant="solid" radius="lg" padding="none" className="gap-4 p-6">
-            <CardTitle className="text-base">{applications.detail.evaluate}</CardTitle>
-            <EvaluateCostForm
+            {/* Fee Evaluation Form */}
+            <Card variant="solid" radius="lg" padding="none" className="gap-4 p-6">
+              <CardTitle className="text-base">
+                {applications.detail.evaluate}
+              </CardTitle>
+              <EvaluateCostForm
+                id={id}
+                totalAmount={record.totalAmount}
+                currency={record.currency}
+                allowInstallment={record.allowInstallment}
+                type="passport"
+                status={record.status}
+                paymentStatus={record.paymentStatus}
+                applicantName={record.applicant.name}
+              />
+            </Card>
+
+            {/* Bank Payment Confirmation */}
+            <ConfirmBankPaymentModal
               id={id}
               totalAmount={record.totalAmount}
+              amountPaid={record.amountPaid}
+              balanceDue={record.balanceDue}
               currency={record.currency}
               allowInstallment={record.allowInstallment}
               type="passport"
-              status={record.status}
-              paymentStatus={record.paymentStatus}
-              applicantName={record.applicant.name}
             />
-          </Card>
 
-          {/* Bank Payment Confirmation */}
-          <ConfirmBankPaymentModal
-            id={id}
-            totalAmount={record.totalAmount}
-            amountPaid={record.amountPaid}
-            balanceDue={record.balanceDue}
-            currency={record.currency}
-            allowInstallment={record.allowInstallment}
-            type="passport"
-          />
-
-          {/* Appointment Invitation Modal */}
-          <InviteApplicantModal
-            id={id}
-            applicantName={record.applicant.name}
-            applicantEmail={record.applicant.email}
-            status={record.status}
-            type="passport"
-          />
-        </div>
+            {/* Appointment Invitation Modal */}
+            <InviteApplicantModal
+              id={id}
+              applicantName={record.applicant.name}
+              applicantEmail={record.applicant.email}
+              status={record.status}
+              type="passport"
+            />
+          </div>
+        ) : (
+          <ReadOnlyCaseNote />
+        )}
       </div>
     </div>
   );

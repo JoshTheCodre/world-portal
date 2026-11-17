@@ -291,7 +291,7 @@ function ProfessionalCard({
         <div className="my-3 flex flex-wrap items-center gap-x-3 gap-y-1.5 text-xs text-muted-foreground">
           <span className="flex items-center gap-1 font-medium text-foreground">
             <MapPin className="size-3.5 text-primary" aria-hidden />
-            {pro.city}, {pro.country}
+            {pro.country}
           </span>
           <Badge variant="muted" size="sm" className="text-[11px]">
             {categoryLabel(pro.category)}
@@ -351,7 +351,7 @@ function ProfessionalDetails({
               </Badge>
             </div>
             <DialogDescription className="mt-0.5 text-xs">
-              {pro.title} · {pro.city}, {pro.country}
+              {pro.title} · {pro.country}
             </DialogDescription>
             <div className="mt-2 flex flex-wrap items-center gap-2">
               <Badge variant="muted" size="sm">
@@ -389,7 +389,7 @@ function ProfessionalDetails({
             </p>
             <p className="flex items-center gap-1 text-xs font-medium text-foreground">
               <MapPin className="size-3.5 shrink-0 text-primary" aria-hidden />
-              {pro.city}, {pro.country}
+              {pro.country}
             </p>
           </div>
           <div className="space-y-1">

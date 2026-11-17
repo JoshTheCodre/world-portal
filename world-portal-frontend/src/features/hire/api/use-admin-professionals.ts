@@ -17,7 +17,6 @@ export type AdminProfessional = {
   title: string;
   category: string;
   bio?: string | null;
-  city: string;
   country: string;
   hourlyRate: string | number;
   currency?: string | null;

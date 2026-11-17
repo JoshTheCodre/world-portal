@@ -59,7 +59,8 @@ export async function GET(request: Request) {
     ]);
 
     const transactions = rawTx.map((t) => ({ ...t, currency: transactionCurrency(t) }));
-    // The service has no refunds endpoint; refunds come nested on their transaction.
+    // Refunds are read from their transactions, which are fetched anyway for
+    // the summary. (`GET /payments/refunds` pages them on the service too.)
     const refunds = refundsFromTransactions(transactions);
     const applications = [
       ...visaRecords.map(toVisaApplication),
