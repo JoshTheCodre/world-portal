@@ -25,7 +25,17 @@ function block(selector: string) {
 }
 
 const root = block(":root");
-const themes = { light: root, dark: { ...root, ...block(".dark") } };
+const dark = block(".dark");
+const gold = block('html[data-palette="worldstreet"]');
+const goldDark = block('html.dark[data-palette="worldstreet"]');
+
+/** Later blocks win, the way the cascade layers them on <html>. */
+const themes = {
+  light: root,
+  dark: { ...root, ...dark },
+  "worldstreet light": { ...root, ...gold },
+  "worldstreet dark": { ...root, ...dark, ...gold, ...goldDark },
+};
 
 type Rgb = [number, number, number];
 
@@ -74,6 +84,26 @@ describe.each(Object.entries(themes))("%s theme", (_, tokens) => {
   it.each(["foreground", "muted-foreground"])("--%s reads on page and card", (text) => {
     expect(ratio(colour(tokens, text), background)).toBeGreaterThanOrEqual(AA);
     expect(ratio(colour(tokens, text), card)).toBeGreaterThanOrEqual(AA);
+  });
+
+  it("--primary reads as text (links, the active nav icon) on page and card", () => {
+    expect(ratio(colour(tokens, "primary"), background)).toBeGreaterThanOrEqual(AA);
+    expect(ratio(colour(tokens, "primary"), card)).toBeGreaterThanOrEqual(AA);
+  });
+
+  it("text on a primary fill reads (badges, counts)", () => {
+    expect(
+      ratio(colour(tokens, "primary-foreground"), colour(tokens, "primary")),
+    ).toBeGreaterThanOrEqual(AA);
+  });
+
+  it("the primary button's text reads on its fill", () => {
+    expect(
+      ratio(
+        colour(tokens, "primary-button-foreground"),
+        colour(tokens, "primary-button"),
+      ),
+    ).toBeGreaterThanOrEqual(AA);
   });
 
   it.each(STATUSES)("--%s-text reads on the card and on its own wash", (status) => {

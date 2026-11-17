@@ -70,6 +70,7 @@ export function LoginForm() {
                   type="email"
                   autoComplete="email"
                   placeholder="you@worldportal.travel"
+                  className="rounded-md"
                   {...field}
                 />
               </FormControl>
@@ -85,7 +86,12 @@ export function LoginForm() {
             <FormItem>
               <FormLabel required>Password</FormLabel>
               <FormControl>
-                <Input type="password" autoComplete="current-password" {...field} />
+                <Input
+                  type="password"
+                  autoComplete="current-password"
+                  className="rounded-md"
+                  {...field}
+                />
               </FormControl>
               <FormMessage />
             </FormItem>
@@ -112,13 +118,11 @@ export function LoginForm() {
           size="block"
           isLoading={isPending}
           loadingText="Signing in"
-          className="mt-2"
+          className="mt-2 rounded-md"
         >
           {login.submitLabel}
           <ArrowRight />
         </Button>
-
-        <p className="text-center text-[12px] text-muted-foreground">{login.hint}</p>
       </form>
     </Form>
   );

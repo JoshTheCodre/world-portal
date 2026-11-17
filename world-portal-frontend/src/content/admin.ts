@@ -6,17 +6,30 @@ import type {
   VisaStatus,
 } from "@/server/data/backend-types";
 
+/** What the staff side is called, everywhere it names itself. */
+export const adminBrand = {
+  name: "E-Embassy Admin",
+  tag: "Admin",
+  navLabel: "Admin navigation",
+  backToSite: "Back to site",
+  searchPlaceholder: "Search files or people",
+  signOut: "Sign out",
+} as const;
+
 export const login = {
-  eyebrow: "Console",
-  headingLead: "Welcome",
-  headingAccent: "back.",
-  body: "Sign in to manage enquiries, applications and customers.",
+  title: adminBrand.name,
+  body: "Sign in to work visa and passport applications.",
   submitLabel: "Sign in",
-  hint: "Demo credentials: admin@worldportal.travel / worldportal",
-  image: {
-    src: "/images/hero.jpg",
-    alt: "A turquoise lagoon seen from above",
-  },
+  backToSite: adminBrand.backToSite,
+} as const;
+
+/** The appearance menu: colours on top of light / dark. */
+export const appearance = {
+  label: "Appearance",
+  colours: "Colours",
+  mode: "Mode",
+  palettes: { embassy: "E-Embassy blue", worldstreet: "WorldStreet gold" },
+  modes: { light: "Light", dark: "Dark", system: "Match my device" },
 } as const;
 
 /** Settings → team (`features/settings/components/team-list.tsx`, invite modal). */
