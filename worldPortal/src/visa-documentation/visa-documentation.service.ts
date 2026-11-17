@@ -17,10 +17,12 @@ import {
   PaymentStatus,
   PaymentOption,
   VisaCategory,
+  VisaDocumentation,
   Gender,
   Prisma,
 } from '@prisma/client';
 import { randomInt } from 'crypto';
+import { serializable } from '../prisma/serializable';
 import { SendGridService } from '../mail/sendgrid.service';
 import { BankAccountService } from '../bank-account/bank-account.service';
 import { OtpService } from '../otp/otp.service';
@@ -201,15 +203,17 @@ export class VisaDocumentationService {
   ) {
     const record = await this.findVisaApplicationById(id);
 
-    // ADR 0016: a price is set while the file waits for one, never after the
-    // applicant has paid against it or a decision has been made. Re-pricing
-    // used to reset amountPaid to 0, erasing the record of the payment.
+    // ADR 0016: the price can change while no money is held against it and no
+    // decision has been made. Re-pricing used to reset amountPaid to 0,
+    // erasing the record of the payment. A file under review with nothing
+    // held (its review was started before it was priced, or its payment was
+    // refunded) can still be priced, or it could never be paid for.
     if (
-      record.status !== VisaDocumentStatus.SUBMITTED &&
-      record.status !== VisaDocumentStatus.EVALUATED
+      record.status === VisaDocumentStatus.APPROVED ||
+      record.status === VisaDocumentStatus.REJECTED
     ) {
       throw new ConflictException(
-        `This application is ${record.status.toLowerCase().replace('_', ' ')} — its price can no longer be changed.`,
+        `This application is ${record.status.toLowerCase()} — its price can no longer be changed.`,
       );
     }
     if (
@@ -244,7 +248,11 @@ export class VisaDocumentationService {
         amountPaid: new Prisma.Decimal(alreadyPaid),
         allowInstallment,
         paymentStatus: PaymentStatus.AWAITING_PAYMENT,
-        status: VisaDocumentStatus.EVALUATED,
+        // A review already under way stays under way.
+        status:
+          record.status === VisaDocumentStatus.UNDER_REVIEW
+            ? VisaDocumentStatus.UNDER_REVIEW
+            : VisaDocumentStatus.EVALUATED,
         evaluatedBy: evaluatorName,
         evaluatedAt: new Date(),
       },
@@ -287,13 +295,35 @@ export class VisaDocumentationService {
     return updated;
   }
 
+  /** Records a confirmed payment on the file, then emails the applicant. */
   async handlePaymentConfirmed(
     visaDocId: string,
     amount: Prisma.Decimal,
     paymentOption: PaymentOption,
   ) {
-    const record = await this.findVisaApplicationById(visaDocId);
+    const { id } = await this.findVisaApplicationById(visaDocId);
+    const updated = await serializable(this.prisma, async (tx) => {
+      const record = await tx.visaDocumentation.findUniqueOrThrow({
+        where: { id },
+      });
+      return this.applyPayment(tx, record, amount, paymentOption);
+    });
+    this.notifyPaymentConfirmed(updated, paymentOption);
+    return updated;
+  }
 
+  /**
+   * Adds `amount` to `record` inside the caller's transaction, and moves a
+   * file waiting for payment into review. `record` must have been read in the
+   * same transaction, so the amount is added to the balance that was checked.
+   * Sends nothing: call `notifyPaymentConfirmed` once the transaction commits.
+   */
+  async applyPayment(
+    tx: Prisma.TransactionClient,
+    record: VisaDocumentation,
+    amount: Prisma.Decimal,
+    paymentOption: PaymentOption,
+  ) {
     const currentTotal = Number(record.totalAmount || 0);
     const currentPaid = Number(record.amountPaid || 0);
     const addedAmount = Number(amount);
@@ -320,7 +350,7 @@ export class VisaDocumentationService {
       `Direct Service Injection: Payment confirmed for applicationNo=${record.applicationNo}, addedAmount=${addedAmount}. status ${record.status} -> ${nextStatus}, paymentStatus=${newPaymentStatus}`,
     );
 
-    const updated = await this.prisma.visaDocumentation.update({
+    return tx.visaDocumentation.update({
       where: { id: record.id },
       data: {
         amountPaid: new Prisma.Decimal(newAmountPaid),
@@ -330,8 +360,13 @@ export class VisaDocumentationService {
         status: nextStatus,
       },
     });
+  }
 
-    // Send payment confirmed & under review email via SendGrid
+  /** The payment-confirmed email. A mail failure is logged, never thrown. */
+  notifyPaymentConfirmed(
+    updated: VisaDocumentation,
+    paymentOption: PaymentOption,
+  ) {
     this.sendGridService
       .sendPaymentConfirmedEmail({
         to: updated.email,
@@ -347,8 +382,6 @@ export class VisaDocumentationService {
           `SendGrid payment confirmed email error: ${err instanceof Error ? err.message : String(err)}`,
         );
       });
-
-    return updated;
   }
 
   async updateStatus(

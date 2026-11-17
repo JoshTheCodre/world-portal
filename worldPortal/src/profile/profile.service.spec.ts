@@ -22,15 +22,26 @@ describe('ProfileService', () => {
     updatedAt: new Date(),
   };
 
+  type Work = (tx: unknown) => Promise<unknown>;
+  const findUnique = jest.fn();
   const mockPrismaService = {
     profile: {
-      findUnique: jest.fn(),
+      findUnique,
+      // Reads the same canned profile as findUnique.
+      findUniqueOrThrow: jest.fn(
+        (args: unknown) => findUnique(args) as Promise<unknown>,
+      ),
       findMany: jest.fn(),
       create: jest.fn(),
       update: jest.fn(),
       count: jest.fn(),
     },
+    $transaction: jest.fn<Promise<unknown>, [Work, unknown?]>(),
   };
+  // The transaction client is the same mock.
+  mockPrismaService.$transaction.mockImplementation((work) =>
+    work(mockPrismaService),
+  );
 
   const mockSendGridService = {
     sendTeamInviteEmail: jest.fn(),
@@ -202,6 +213,36 @@ describe('ProfileService', () => {
       );
 
       expect(mockPrismaService.profile.count).not.toHaveBeenCalled();
+    });
+
+    it('counts managers and changes the role in one serializable transaction', async () => {
+      const order: string[] = [];
+      mockPrismaService.profile.findUnique.mockResolvedValue(mockProfile);
+      mockPrismaService.$transaction.mockImplementationOnce(
+        async (work: (tx: unknown) => Promise<unknown>, options?: unknown) => {
+          order.push('begin');
+          expect(options).toEqual({ isolationLevel: 'Serializable' });
+          const result = await work(mockPrismaService);
+          order.push('commit');
+          return result;
+        },
+      );
+      mockPrismaService.profile.count.mockImplementationOnce(() => {
+        order.push('count');
+        return Promise.resolve(2);
+      });
+      mockPrismaService.profile.update.mockImplementationOnce(() => {
+        order.push('update');
+        return Promise.resolve({ ...mockProfile, isActive: false });
+      });
+
+      await service.deactivateProfile(
+        mockProfile.id,
+        'other.manager@loveworld.com',
+      );
+
+      // Two managers removing each other at once can't both pass the count.
+      expect(order).toEqual(['begin', 'count', 'update', 'commit']);
     });
   });
 

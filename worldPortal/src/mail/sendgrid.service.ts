@@ -540,7 +540,9 @@ export class SendGridService {
       this.logger.log(
         `[SENDGRID MOCK DISPATCH] To: ${to} | Subject: ${subject} | Ref: ${ref}`,
       );
-      return true;
+      // Logged, not delivered. Callers that report delivery (resend invite)
+      // must not tell staff an email went out when none did.
+      return false;
     }
 
     try {

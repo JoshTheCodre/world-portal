@@ -33,7 +33,7 @@ The admin console upgrade (frontend plan "Phase 3 — actions & workflow") wires
 
 ### 4.1 Refunds (D1, D2)
 * `initiateRefund` runs in the existing `$transaction` and additionally updates the linked application:
-  * `amountPaid = max(0, amountPaid − originalAmount)`, `balanceDue = totalAmount − amountPaid`;
+  * `amountPaid = max(0, amountPaid − originalAmount)`, `balanceDue = totalAmount − amountPaid`, except that a full refund (`amountPaid` reaches 0) sets `balanceDue = 0` *(amended in review, 2026-11-17: putting the whole fee back as owed counted refunded files as money to collect and re-offered "record a payment". If the file goes ahead, staff price it again; see §4.3)*;
   * `paymentStatus = REFUNDED` when `amountPaid` reaches 0, otherwise `PARTIALLY_PAID` (`PaymentStatus` = `PENDING_EVALUATION | AWAITING_PAYMENT | PARTIALLY_PAID | FULLY_PAID | REFUNDED`);
   * application `status` is **not** changed — refunding is a money decision, not a visa decision.
 * **New** `GET /payments/refunds` — `@Roles(MANAGER, STAFF)`, query `page`, `limit` (reuse `src/hire/dto/query-professionals.dto.ts` conventions), `search` (refundRef, reason, transactionRef). Response `{ data, meta: { total, page, limit, pages } }`; each item includes `transactionRef` and `currency` (from the linked application).
@@ -48,6 +48,10 @@ The admin console upgrade (frontend plan "Phase 3 — actions & workflow") wires
 ### 4.3 Evaluation (D5)
 * `evaluateVisaCost` keeps `amountPaid`; `balanceDue = max(0, totalAmount − amountPaid)`.
 * Re-evaluation is refused with **409** once `paymentStatus` is `PARTIALLY_PAID` or `FULLY_PAID` (or a `CONFIRMED` transaction exists), and when status is `APPROVED` or `REJECTED`. Allowed from `SUBMITTED` and `EVALUATED` (same rule as passport).
+* *Amended in review, 2026-11-17:* also allowed from `UNDER_REVIEW` while no money is held, and the file stays `UNDER_REVIEW`. ADR 0017 lets staff start a review before pricing, and a refund leaves the file under review; without this, neither file could ever be priced or paid for. Passports follow the same rule.
+
+### 4.3a Concurrency *(added in review, 2026-11-17)*
+* Refunds, bank-transfer confirmations, `handlePaymentConfirmed` and the team safeguards each read, check and write inside one `SERIALIZABLE` transaction (`src/prisma/serializable.ts`). Checked outside the transaction, a double click or two staff at once could refund one payment twice, record more than the price, or remove the last two managers together. A serialization clash is retried twice with fresh reads, then answered with **409**. Emails are sent after the commit.
 
 ### 4.4 Team safeguards (D6)
 * `updateProfile` / `deactivateProfile` receive the acting profile (from `RolesGuard` → `request.profile`) and refuse with **409**:

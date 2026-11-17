@@ -5,6 +5,7 @@ import {
   Logger,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { serializable } from '../prisma/serializable';
 import { CreateProfileDto } from './dto/create-profile.dto';
 import { UpdateProfileDto } from './dto/update-profile.dto';
 import { QueryProfileDto } from './dto/query-profile.dto';
@@ -174,8 +175,14 @@ export class ProfileService {
    * ADR 0016 — the console must never lock itself out. Refuses (409) when the
    * change would take a manager's own role or access away from themselves,
    * or leave no active manager at all.
+   *
+   * Runs in the same serializable transaction as the change it guards (see
+   * `updateProfile` / `deactivateProfile`). Counted outside it, two managers
+   * removing each other at the same moment both saw two managers and both
+   * went through, leaving none.
    */
   private async assertTeamChangeAllowed(
+    tx: Prisma.TransactionClient,
     target: Profile,
     change: { role?: Profile['role']; isActive?: boolean },
     actorEmail?: string,
@@ -195,7 +202,7 @@ export class ProfileService {
       target.isActive &&
       (losesAccess || (losesRole && change.role !== UserRole.MANAGER));
     if (stopsBeingManager) {
-      const activeManagers = await this.prisma.profile.count({
+      const activeManagers = await tx.profile.count({
         where: { role: UserRole.MANAGER, isActive: true },
       });
       if (activeManagers <= 1) {
@@ -212,32 +219,33 @@ export class ProfileService {
     actorEmail?: string,
   ): Promise<Profile> {
     this.logger.log(`Updating profile ID=${id}`);
-    const target = await this.findProfileById(id);
-    await this.assertTeamChangeAllowed(target, dto, actorEmail);
+    await this.findProfileById(id);
 
-    if (dto.email) {
-      const existing = await this.prisma.profile.findUnique({
-        where: { email: dto.email },
-      });
-      if (existing && existing.id !== id) {
-        throw new ConflictException(`Email ${dto.email} is already in use`);
+    const updated = await serializable(this.prisma, async (tx) => {
+      const target = await tx.profile.findUniqueOrThrow({ where: { id } });
+      await this.assertTeamChangeAllowed(tx, target, dto, actorEmail);
+
+      if (dto.email) {
+        const existing = await tx.profile.findUnique({
+          where: { email: dto.email },
+        });
+        if (existing && existing.id !== id) {
+          throw new ConflictException(`Email ${dto.email} is already in use`);
+        }
       }
-    }
 
-    if (dto.externalAuthId) {
-      const existingExt = await this.prisma.profile.findUnique({
-        where: { externalAuthId: dto.externalAuthId },
-      });
-      if (existingExt && existingExt.id !== id) {
-        throw new ConflictException(
-          `External Auth ID ${dto.externalAuthId} is already linked to another profile`,
-        );
+      if (dto.externalAuthId) {
+        const existingExt = await tx.profile.findUnique({
+          where: { externalAuthId: dto.externalAuthId },
+        });
+        if (existingExt && existingExt.id !== id) {
+          throw new ConflictException(
+            `External Auth ID ${dto.externalAuthId} is already linked to another profile`,
+          );
+        }
       }
-    }
 
-    const updated = await this.prisma.profile.update({
-      where: { id },
-      data: dto,
+      return tx.profile.update({ where: { id }, data: dto });
     });
 
     this.logger.log(`Profile ID=${id} updated successfully`);
@@ -246,12 +254,17 @@ export class ProfileService {
 
   async deactivateProfile(id: string, actorEmail?: string): Promise<Profile> {
     this.logger.log(`Deactivating profile ID=${id}`);
-    const target = await this.findProfileById(id);
-    await this.assertTeamChangeAllowed(target, { isActive: false }, actorEmail);
+    await this.findProfileById(id);
 
-    const deactivated = await this.prisma.profile.update({
-      where: { id },
-      data: { isActive: false },
+    const deactivated = await serializable(this.prisma, async (tx) => {
+      const target = await tx.profile.findUniqueOrThrow({ where: { id } });
+      await this.assertTeamChangeAllowed(
+        tx,
+        target,
+        { isActive: false },
+        actorEmail,
+      );
+      return tx.profile.update({ where: { id }, data: { isActive: false } });
     });
 
     this.logger.log(`Profile ID=${id} deactivated successfully`);

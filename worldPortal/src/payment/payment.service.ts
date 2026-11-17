@@ -26,6 +26,7 @@ import {
   Prisma,
 } from '@prisma/client';
 import { randomInt } from 'crypto';
+import { serializable } from '../prisma/serializable';
 
 /** The money fields every payable application shares (visa and passport). */
 type PayableApplication = {
@@ -39,11 +40,16 @@ type PayableApplication = {
  * An application's money after `refunded` is taken back off it (ADR 0016).
  * `REFUNDED` once nothing is held any more; otherwise whatever the remaining
  * payment amounts to.
+ *
+ * A full refund owes nothing: putting the whole fee back as `balanceDue`
+ * counted refunded files as money still to collect and offered to record a
+ * payment on them. If the file goes ahead, staff price it again (allowed once
+ * nothing is held), which sets the balance afresh.
  */
 export function balancesAfterRefund(app: PayableApplication, refunded: number) {
   const total = Number(app.totalAmount || 0);
   const paid = Math.max(0, Number(app.amountPaid || 0) - refunded);
-  const balance = Math.max(0, total - paid);
+  const balance = paid === 0 ? 0 : Math.max(0, total - paid);
   const paymentStatus =
     paid === 0
       ? PaymentStatus.REFUNDED
@@ -301,6 +307,7 @@ export class PaymentService {
 
   /** Writes the confirmed transaction; a reused bank reference is a 409, not a 500. */
   private async createConfirmedBankTransaction(
+    tx: Prisma.TransactionClient,
     data: Omit<Prisma.PaymentTransactionUncheckedCreateInput, 'transactionRef'>,
     bankReference: string | undefined,
   ) {
@@ -308,7 +315,7 @@ export class PaymentService {
       ? `BANK-${bankReference.trim().toUpperCase()}`
       : `TXN-BANK-${randomInt(100000, 999999)}`;
     try {
-      const transaction = await this.prisma.paymentTransaction.create({
+      const transaction = await tx.paymentTransaction.create({
         data: { ...data, transactionRef },
       });
       return { transaction, transactionRef };
@@ -330,37 +337,70 @@ export class PaymentService {
     adminEmail: string,
   ) {
     const notes = dto.notes?.trim() || null;
+    const amount = new Prisma.Decimal(dto.amount);
+    // The balance check, the transaction row and the application's new
+    // balance commit together or not at all (ADR 0016). Two staff recording
+    // the same payment can't both pass the check, and a failure after the row
+    // is written can't strand it (its bank reference would then be refused
+    // as "already recorded" while the balance never moved).
+    const bankTransaction = (
+      tx: Prisma.TransactionClient,
+      link: { visaDocumentationId: string } | { passportApplicationId: string },
+      profileId: string | null,
+    ) =>
+      this.createConfirmedBankTransaction(
+        tx,
+        {
+          ...link,
+          profileId,
+          amount,
+          paymentOption: dto.paymentOption,
+          status: PaymentTransactionStatus.CONFIRMED,
+          paymentMethod: 'BANK_TRANSFER',
+          notes,
+          initiatedBy: adminEmail || 'admin-manual',
+          confirmedAt: new Date(),
+        },
+        dto.bankReference,
+      );
 
     if (dto.passportApplicationId) {
-      const passportApp = await this.passportAppService.findApplicationById(
+      const { id } = await this.passportAppService.findApplicationById(
         dto.passportApplicationId,
       );
-      this.assertBankTransferAllowed(passportApp, dto, 'Passport application');
-
-      const { transaction, transactionRef } =
-        await this.createConfirmedBankTransaction(
-          {
-            passportApplicationId: passportApp.id,
-            profileId: passportApp.profileId || null,
-            amount: new Prisma.Decimal(dto.amount),
-            paymentOption: dto.paymentOption,
-            status: PaymentTransactionStatus.CONFIRMED,
-            paymentMethod: 'BANK_TRANSFER',
-            notes,
-            initiatedBy: adminEmail || 'admin-manual',
-            confirmedAt: new Date(),
-          },
-          dto.bankReference,
-        );
-
-      await this.passportAppService.handlePaymentConfirmed(
-        passportApp.id,
-        new Prisma.Decimal(dto.amount),
+      const { transaction, transactionRef, updated } = await serializable(
+        this.prisma,
+        async (tx) => {
+          const passportApp = await tx.passportApplication.findUniqueOrThrow({
+            where: { id },
+          });
+          this.assertBankTransferAllowed(
+            passportApp,
+            dto,
+            'Passport application',
+          );
+          const created = await bankTransaction(
+            tx,
+            { passportApplicationId: id },
+            passportApp.profileId || null,
+          );
+          const updated = await this.passportAppService.applyPayment(
+            tx,
+            passportApp,
+            amount,
+            dto.paymentOption,
+          );
+          return { ...created, updated };
+        },
+      );
+      await this.passportAppService.notifyPaymentConfirmed(
+        updated,
+        amount,
         dto.paymentOption,
       );
 
       this.logger.log(
-        `Manual Bank Transfer CONFIRMED by admin=${adminEmail}: transactionRef=${transactionRef}, passportAppId=${passportApp.id}, amount=${dto.amount}`,
+        `Manual Bank Transfer CONFIRMED by admin=${adminEmail}: transactionRef=${transactionRef}, passportAppId=${id}, amount=${dto.amount}`,
       );
 
       return {
@@ -378,37 +418,37 @@ export class PaymentService {
       );
     }
 
-    const visaDoc = await this.visaDocService.findVisaApplicationById(
+    const { id } = await this.visaDocService.findVisaApplicationById(
       dto.visaDocumentationId,
     );
-    this.assertBankTransferAllowed(visaDoc, dto, 'Visa application');
-
-    const { transaction, transactionRef } =
-      await this.createConfirmedBankTransaction(
-        {
-          visaDocumentationId: visaDoc.id,
-          profileId: visaDoc.profileId || null,
-          amount: new Prisma.Decimal(dto.amount),
-          paymentOption: dto.paymentOption,
-          status: PaymentTransactionStatus.CONFIRMED,
-          paymentMethod: 'BANK_TRANSFER',
-          notes,
-          initiatedBy: adminEmail || 'admin-manual',
-          confirmedAt: new Date(),
-        },
-        dto.bankReference,
-      );
-
-    // Updates amountPaid / balanceDue / paymentStatus, moves a SUBMITTED or
-    // EVALUATED file to UNDER_REVIEW, and sends the receipt email.
-    await this.visaDocService.handlePaymentConfirmed(
-      visaDoc.id,
-      new Prisma.Decimal(dto.amount),
-      dto.paymentOption,
+    const { transaction, transactionRef, updated } = await serializable(
+      this.prisma,
+      async (tx) => {
+        const visaDoc = await tx.visaDocumentation.findUniqueOrThrow({
+          where: { id },
+        });
+        this.assertBankTransferAllowed(visaDoc, dto, 'Visa application');
+        const created = await bankTransaction(
+          tx,
+          { visaDocumentationId: id },
+          visaDoc.profileId || null,
+        );
+        // Updates amountPaid / balanceDue / paymentStatus and moves a
+        // SUBMITTED or EVALUATED file to UNDER_REVIEW.
+        const updated = await this.visaDocService.applyPayment(
+          tx,
+          visaDoc,
+          amount,
+          dto.paymentOption,
+        );
+        return { ...created, updated };
+      },
     );
+    // The receipt email, only once the payment is committed.
+    this.visaDocService.notifyPaymentConfirmed(updated, dto.paymentOption);
 
     this.logger.log(
-      `Manual Bank Transfer CONFIRMED by admin=${adminEmail}: transactionRef=${transactionRef}, visaDocId=${visaDoc.id}, amount=${dto.amount}`,
+      `Manual Bank Transfer CONFIRMED by admin=${adminEmail}: transactionRef=${transactionRef}, visaDocId=${id}, amount=${dto.amount}`,
     );
 
     return {
@@ -421,34 +461,48 @@ export class PaymentService {
   }
 
   async initiateRefund(dto: InitiateRefundDto, adminEmail: string) {
-    const transaction = await this.prisma.paymentTransaction.findUnique({
-      where: { transactionRef: dto.transactionRef },
-      include: { visaDocumentation: true, passportApplication: true },
-    });
-
-    if (!transaction) {
-      throw new NotFoundException(
-        `Payment transaction with reference '${dto.transactionRef}' not found.`,
-      );
-    }
-
-    if (transaction.status !== PaymentTransactionStatus.CONFIRMED) {
-      throw new BadRequestException(
-        'Only CONFIRMED payment transactions can be refunded.',
-      );
-    }
-
     const config = await this.getOrCreatePaymentConfig();
     const surchargeRate = Number(config.refundSurchargePercentage) / 100;
-    const originalAmount = Number(transaction.amount);
-    const surchargeAmount = originalAmount * surchargeRate;
-    const netRefundAmount = originalAmount - surchargeAmount;
-
     const refundRef = `RFD-${randomInt(100000, 999999)}`;
-    const visa = transaction.visaDocumentation;
-    const passport = transaction.passportApplication;
 
-    const refund = await this.prisma.$transaction(async (tx) => {
+    // The status check, the refund and the application's new balance happen
+    // in one transaction, reading the payment and its application inside it.
+    // Checked outside, a double click or two managers could both refund the
+    // same payment, and a payment recorded in between was overwritten by a
+    // stale amountPaid.
+    const {
+      refund,
+      visa,
+      passport,
+      originalAmount,
+      surchargeAmount,
+      netRefundAmount,
+    } = await serializable(this.prisma, async (tx) => {
+      const transaction = await tx.paymentTransaction.findUnique({
+        where: { transactionRef: dto.transactionRef },
+        include: { visaDocumentation: true, passportApplication: true },
+      });
+
+      if (!transaction) {
+        throw new NotFoundException(
+          `Payment transaction with reference '${dto.transactionRef}' not found.`,
+        );
+      }
+      if (transaction.status === PaymentTransactionStatus.REFUNDED) {
+        throw new ConflictException('This payment has already been refunded.');
+      }
+      if (transaction.status !== PaymentTransactionStatus.CONFIRMED) {
+        throw new BadRequestException(
+          'Only CONFIRMED payment transactions can be refunded.',
+        );
+      }
+
+      const originalAmount = Number(transaction.amount);
+      const surchargeAmount = originalAmount * surchargeRate;
+      const netRefundAmount = originalAmount - surchargeAmount;
+      const visa = transaction.visaDocumentation;
+      const passport = transaction.passportApplication;
+
       const createdRefund = await tx.paymentRefund.create({
         data: {
           refundRef,
@@ -484,7 +538,14 @@ export class PaymentService {
         });
       }
 
-      return createdRefund;
+      return {
+        refund: createdRefund,
+        visa,
+        passport,
+        originalAmount,
+        surchargeAmount,
+        netRefundAmount,
+      };
     });
 
     this.logger.log(
@@ -612,17 +673,18 @@ export class PaymentService {
       orderBy: { createdAt: 'desc' },
       include: {
         refunds: true,
-        visaDocumentation: {
-          select: {
-            currency: true,
-          },
-        },
+        visaDocumentation: { select: { currency: true } },
+        // Without this every passport payment was reported in NGN.
+        passportApplication: { select: { currency: true } },
       },
     });
 
     return records.map((t) => ({
       ...t,
-      currency: t.visaDocumentation?.currency || 'NGN',
+      currency:
+        t.visaDocumentation?.currency ||
+        t.passportApplication?.currency ||
+        'NGN',
     }));
   }
 

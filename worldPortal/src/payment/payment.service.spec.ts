@@ -55,10 +55,17 @@ describe('PaymentService', () => {
 
   const mockFindVisaApplicationById = jest.fn();
   const mockHandlePaymentConfirmed = jest.fn();
+  const mockApplyVisaPayment = jest.fn();
+  const mockNotifyVisaPayment = jest.fn();
+  const mockFindPassportApplicationById = jest.fn();
+  const mockApplyPassportPayment = jest.fn();
+  const mockNotifyPassportPayment = jest.fn();
 
   const mockPassportAppService: Partial<PassportApplicationService> = {
-    findApplicationById: jest.fn(),
+    findApplicationById: mockFindPassportApplicationById,
     handlePaymentConfirmed: jest.fn(),
+    applyPayment: mockApplyPassportPayment,
+    notifyPaymentConfirmed: mockNotifyPassportPayment,
   };
 
   const mockPaymentTransactionCreate = jest.fn();
@@ -69,11 +76,16 @@ describe('PaymentService', () => {
   const mockPaymentRefundCount = jest.fn();
   const mockPaymentRefundFindMany = jest.fn();
   const mockVisaDocumentationUpdate = jest.fn();
+  const mockVisaDocumentationFindUniqueOrThrow = jest.fn();
   const mockPassportApplicationUpdate = jest.fn();
+  const mockPassportApplicationFindUniqueOrThrow = jest.fn();
+  const mockPaymentTransactionFindMany = jest.fn();
 
   const mockVisaDocService: Partial<VisaDocumentationService> = {
     findVisaApplicationById: mockFindVisaApplicationById,
     handlePaymentConfirmed: mockHandlePaymentConfirmed,
+    applyPayment: mockApplyVisaPayment,
+    notifyPaymentConfirmed: mockNotifyVisaPayment,
   };
 
   const mockPrismaService: Partial<PrismaService> = {
@@ -86,15 +98,21 @@ describe('PaymentService', () => {
       create: mockPaymentTransactionCreate,
       findUnique: mockPaymentTransactionFindUnique,
       update: mockPaymentTransactionUpdate,
-      findMany: jest.fn(),
+      findMany: mockPaymentTransactionFindMany,
     } as never,
     paymentRefund: {
       create: mockPaymentRefundCreate,
       count: mockPaymentRefundCount,
       findMany: mockPaymentRefundFindMany,
     } as never,
-    visaDocumentation: { update: mockVisaDocumentationUpdate } as never,
-    passportApplication: { update: mockPassportApplicationUpdate } as never,
+    visaDocumentation: {
+      update: mockVisaDocumentationUpdate,
+      findUniqueOrThrow: mockVisaDocumentationFindUniqueOrThrow,
+    } as never,
+    passportApplication: {
+      update: mockPassportApplicationUpdate,
+      findUniqueOrThrow: mockPassportApplicationFindUniqueOrThrow,
+    } as never,
     // Callback form runs against the same mocks; array form resolves each query.
     $transaction: jest.fn(async (arg: unknown) =>
       typeof arg === 'function'
@@ -279,11 +297,12 @@ describe('PaymentService', () => {
         'admin@loveworld.com',
       );
 
-      // The whole 500 paid comes back off the file: nothing is held any more.
+      // The whole 500 paid comes back off the file: nothing is held any more,
+      // and nothing is owed until staff price the file again.
       const { where, data } = firstArg(mockVisaDocumentationUpdate);
       expect(where).toEqual({ id: 'visa-001' });
       expect(Number(data.amountPaid)).toBe(0);
-      expect(Number(data.balanceDue)).toBe(1000);
+      expect(Number(data.balanceDue)).toBe(0);
       expect(data.paymentStatus).toBe(PaymentStatus.REFUNDED);
       expect(data).not.toHaveProperty('status');
     });
@@ -334,6 +353,59 @@ describe('PaymentService', () => {
       ).rejects.toThrow(BadRequestException);
       expect(mockPaymentRefundCreate).not.toHaveBeenCalled();
     });
+
+    it('refuses a payment that was already refunded with 409', async () => {
+      refundSetup();
+      mockPaymentTransactionFindUnique.mockResolvedValue({
+        ...mockTransaction,
+        status: PaymentTransactionStatus.REFUNDED,
+        visaDocumentation: linkedVisa,
+        passportApplication: null,
+      });
+
+      await expect(
+        service.initiateRefund(
+          { transactionRef: 'TXN-PAY-123456', reason: 'Trip cancelled' },
+          'admin@loveworld.com',
+        ),
+      ).rejects.toThrow(ConflictException);
+      expect(mockPaymentRefundCreate).not.toHaveBeenCalled();
+    });
+
+    it('reads the payment inside one serializable transaction', async () => {
+      refundSetup();
+      const order: string[] = [];
+      (
+        mockPrismaService.$transaction as unknown as jest.Mock
+      ).mockImplementationOnce(
+        async (work: (tx: unknown) => Promise<unknown>, options: unknown) => {
+          order.push('begin');
+          expect(options).toEqual({
+            isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
+          });
+          const result = await work(mockPrismaService);
+          order.push('commit');
+          return result;
+        },
+      );
+      mockPaymentTransactionFindUnique.mockImplementationOnce(() => {
+        order.push('read');
+        return Promise.resolve({
+          ...mockTransaction,
+          status: PaymentTransactionStatus.CONFIRMED,
+          visaDocumentation: linkedVisa,
+          passportApplication: null,
+        });
+      });
+
+      await service.initiateRefund(
+        { transactionRef: 'TXN-PAY-123456', reason: 'Trip cancelled' },
+        'admin@loveworld.com',
+      );
+
+      // The status is read after the transaction begins, not before it.
+      expect(order).toEqual(['begin', 'read', 'commit']);
+    });
   });
 
   describe('balancesAfterRefund', () => {
@@ -349,6 +421,13 @@ describe('PaymentService', () => {
       expect(Number(after.amountPaid)).toBe(500);
       expect(Number(after.balanceDue)).toBe(500);
       expect(after.paymentStatus).toBe(PaymentStatus.PARTIALLY_PAID);
+    });
+
+    it('owes nothing once the whole payment is refunded', () => {
+      const after = balancesAfterRefund(app, 1000);
+      expect(Number(after.amountPaid)).toBe(0);
+      expect(Number(after.balanceDue)).toBe(0);
+      expect(after.paymentStatus).toBe(PaymentStatus.REFUNDED);
     });
 
     it('never goes below zero paid', () => {
@@ -371,6 +450,7 @@ describe('PaymentService', () => {
 
     it('records the staff notes on the transaction', async () => {
       mockFindVisaApplicationById.mockResolvedValue(evaluatedVisa);
+      mockVisaDocumentationFindUniqueOrThrow.mockResolvedValue(evaluatedVisa);
       mockPaymentTransactionCreate.mockResolvedValue({ id: 'txn-9' });
 
       await service.confirmBankTransferPayment(
@@ -387,11 +467,78 @@ describe('PaymentService', () => {
       const { data } = firstArg(mockPaymentTransactionCreate);
       expect(data.notes).toBe('Paid at the Ikeja branch');
       expect(data.transactionRef).toBe('BANK-GTB-7781');
-      expect(mockHandlePaymentConfirmed).toHaveBeenCalled();
+      expect(mockApplyVisaPayment).toHaveBeenCalledWith(
+        mockPrismaService,
+        evaluatedVisa,
+        new Prisma.Decimal(1000),
+        PaymentOption.FULL,
+      );
+      expect(mockNotifyVisaPayment).toHaveBeenCalled();
+    });
+
+    it('checks the balance read inside the transaction, not a stale one', async () => {
+      // Read before the transaction: nothing paid. Read inside it: a colleague
+      // has just recorded the full amount.
+      mockFindVisaApplicationById.mockResolvedValue(evaluatedVisa);
+      mockVisaDocumentationFindUniqueOrThrow.mockResolvedValue({
+        ...evaluatedVisa,
+        amountPaid: new Prisma.Decimal(1000),
+      });
+
+      await expect(
+        service.confirmBankTransferPayment(
+          {
+            visaDocumentationId: 'visa-001',
+            amount: 1000,
+            paymentOption: PaymentOption.FULL,
+          },
+          'staff@loveworld.com',
+        ),
+      ).rejects.toThrow(ConflictException);
+      expect(mockPaymentTransactionCreate).not.toHaveBeenCalled();
+      expect(mockApplyVisaPayment).not.toHaveBeenCalled();
+    });
+
+    it('records a passport payment in the same transaction and emails after', async () => {
+      const passport = {
+        id: 'pp-001',
+        profileId: null,
+        totalAmount: new Prisma.Decimal(150),
+        amountPaid: new Prisma.Decimal(0),
+        allowInstallment: false,
+      };
+      mockFindPassportApplicationById.mockResolvedValue(passport);
+      mockPassportApplicationFindUniqueOrThrow.mockResolvedValue(passport);
+      mockPaymentTransactionCreate.mockResolvedValue({ id: 'txn-10' });
+      mockApplyPassportPayment.mockResolvedValue({
+        ...passport,
+        amountPaid: new Prisma.Decimal(150),
+      });
+
+      await service.confirmBankTransferPayment(
+        {
+          passportApplicationId: 'pp-001',
+          amount: 150,
+          paymentOption: PaymentOption.FULL,
+        },
+        'staff@loveworld.com',
+      );
+
+      expect(
+        firstArg(mockPaymentTransactionCreate).data.passportApplicationId,
+      ).toBe('pp-001');
+      expect(mockApplyPassportPayment).toHaveBeenCalledWith(
+        mockPrismaService,
+        passport,
+        new Prisma.Decimal(150),
+        PaymentOption.FULL,
+      );
+      expect(mockNotifyPassportPayment).toHaveBeenCalled();
     });
 
     it('refuses a half payment on a file that does not allow instalments', async () => {
       mockFindVisaApplicationById.mockResolvedValue(evaluatedVisa);
+      mockVisaDocumentationFindUniqueOrThrow.mockResolvedValue(evaluatedVisa);
 
       await expect(
         service.confirmBankTransferPayment(
@@ -408,6 +555,7 @@ describe('PaymentService', () => {
 
     it('refuses more than the balance due', async () => {
       mockFindVisaApplicationById.mockResolvedValue(evaluatedVisa);
+      mockVisaDocumentationFindUniqueOrThrow.mockResolvedValue(evaluatedVisa);
 
       await expect(
         service.confirmBankTransferPayment(
@@ -423,6 +571,7 @@ describe('PaymentService', () => {
 
     it('answers a reused bank reference with 409, not a server error', async () => {
       mockFindVisaApplicationById.mockResolvedValue(evaluatedVisa);
+      mockVisaDocumentationFindUniqueOrThrow.mockResolvedValue(evaluatedVisa);
       mockPaymentTransactionCreate.mockRejectedValue(
         new Prisma.PrismaClientKnownRequestError('Unique constraint failed', {
           code: 'P2002',
@@ -441,7 +590,33 @@ describe('PaymentService', () => {
           'staff@loveworld.com',
         ),
       ).rejects.toThrow(ConflictException);
-      expect(mockHandlePaymentConfirmed).not.toHaveBeenCalled();
+      expect(mockApplyVisaPayment).not.toHaveBeenCalled();
+      expect(mockNotifyVisaPayment).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('findAllTransactions', () => {
+    it('reports a passport payment in its own currency, not NGN', async () => {
+      mockPaymentTransactionFindMany.mockResolvedValue([
+        {
+          id: 't1',
+          visaDocumentation: null,
+          passportApplication: { currency: 'USD' },
+        },
+        {
+          id: 't2',
+          visaDocumentation: { currency: 'GBP' },
+          passportApplication: null,
+        },
+        { id: 't3', visaDocumentation: null, passportApplication: null },
+      ]);
+
+      const rows = await service.findAllTransactions({});
+
+      expect(rows.map((r) => r.currency)).toEqual(['USD', 'GBP', 'NGN']);
+      const [[query]] = mockPaymentTransactionFindMany.mock
+        .calls as unknown as Array<[{ include: Record<string, unknown> }]>;
+      expect(query.include).toHaveProperty('passportApplication');
     });
   });
 

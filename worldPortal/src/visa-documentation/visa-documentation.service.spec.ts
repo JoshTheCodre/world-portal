@@ -69,19 +69,31 @@ describe('VisaDocumentationService', () => {
     updatedAt: new Date(),
   };
 
+  const findFirst = jest.fn();
   const mockPrismaService = {
     profile: {
       findUnique: jest.fn(),
     },
     visaDocumentation: {
       findUnique: jest.fn(),
-      findFirst: jest.fn(),
+      findFirst,
+      // Reads the same canned record as findFirst (findVisaApplicationById).
+      findUniqueOrThrow: jest.fn(
+        (args: unknown) => findFirst(args) as Promise<unknown>,
+      ),
       findMany: jest.fn(),
       create: jest.fn(),
       update: jest.fn(),
     },
-    $transaction: jest.fn(),
+    $transaction: jest.fn<
+      Promise<unknown>,
+      [(tx: unknown) => Promise<unknown>]
+    >(),
   };
+  // The transaction client is the same mock.
+  mockPrismaService.$transaction.mockImplementation((work) =>
+    work(mockPrismaService),
+  );
 
   beforeEach(async () => {
     const mockOtpService = {
@@ -249,14 +261,62 @@ describe('VisaDocumentationService', () => {
       },
     );
 
+    it.each([VisaDocumentStatus.APPROVED, VisaDocumentStatus.REJECTED])(
+      'refuses to re-price a file that is %s',
+      async (status) => {
+        mockPrismaService.visaDocumentation.findFirst.mockResolvedValue({
+          ...mockVisaRecord,
+          status,
+        });
+
+        await expect(
+          service.evaluateVisaCost(
+            'visa-uuid-001',
+            { totalAmount: 600 },
+            'manager@loveworld.com',
+          ),
+        ).rejects.toThrow(ConflictException);
+      },
+    );
+
     it.each([
-      VisaDocumentStatus.UNDER_REVIEW,
-      VisaDocumentStatus.APPROVED,
-      VisaDocumentStatus.REJECTED,
-    ])('refuses to re-price a file that is %s', async (status) => {
+      [
+        'its review was started before it was priced',
+        PaymentStatus.PENDING_EVALUATION,
+      ],
+      ['its payment was refunded', PaymentStatus.REFUNDED],
+    ])(
+      'prices a file under review with nothing held (%s), keeping it under review',
+      async (_case, paymentStatus) => {
+        mockPrismaService.visaDocumentation.findFirst.mockResolvedValue({
+          ...mockVisaRecord,
+          status: VisaDocumentStatus.UNDER_REVIEW,
+          paymentStatus,
+          totalAmount: null,
+          amountPaid: new Prisma.Decimal(0),
+        });
+        mockPrismaService.visaDocumentation.update.mockResolvedValue(
+          mockVisaRecord,
+        );
+
+        await service.evaluateVisaCost(
+          'visa-uuid-001',
+          { totalAmount: 600 },
+          'manager@loveworld.com',
+        );
+
+        const { data } = firstArg(mockPrismaService.visaDocumentation.update);
+        expect(data.status).toBe(VisaDocumentStatus.UNDER_REVIEW);
+        expect(data.paymentStatus).toBe(PaymentStatus.AWAITING_PAYMENT);
+        expect(Number(data.balanceDue)).toBe(600);
+      },
+    );
+
+    it('refuses to re-price a file under review while money is held', async () => {
       mockPrismaService.visaDocumentation.findFirst.mockResolvedValue({
         ...mockVisaRecord,
-        status,
+        status: VisaDocumentStatus.UNDER_REVIEW,
+        paymentStatus: PaymentStatus.FULLY_PAID,
       });
 
       await expect(
@@ -265,7 +325,7 @@ describe('VisaDocumentationService', () => {
           { totalAmount: 600 },
           'manager@loveworld.com',
         ),
-      ).rejects.toThrow(ConflictException);
+      ).rejects.toThrow(/Refund the payment/);
     });
   });
 
