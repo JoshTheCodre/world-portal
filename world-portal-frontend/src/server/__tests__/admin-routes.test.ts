@@ -155,25 +155,84 @@ describe("/api/admin/professionals", () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
-  it("asks the API with the session's token", async () => {
+  it("asks the API with the session's token and filters what the service ignores", async () => {
     signInAs("STAFF");
+    const pro = (id: string, name: string, category: string, isVerified: boolean) => ({
+      id,
+      name,
+      title: "Photographer",
+      category,
+      bio: null,
+      city: "Lisbon",
+      country: "Portugal",
+      isVerified,
+      createdAt: "2026-01-01T00:00:00.000Z",
+    });
     const page = {
-      data: [{ id: "pro_1" }],
-      meta: { total: 1, page: 1, limit: 20, pages: 1 },
+      data: [
+        pro("pro_1", "Kenji Watanabe", "photographer", true),
+        pro("pro_2", "Ada Okafor", "photographer", false),
+        pro("pro_3", "Kenji Sato", "chef", false),
+      ],
+      meta: { total: 3, page: 1, limit: 500, pages: 1 },
     };
     routeFetch({ "/hire/professionals/admin": () => ok(page) });
 
     const response = await professionals.GET(
-      get("/api/admin/professionals?search=kenji"),
+      get("/api/admin/professionals?q=kenji&category=photographer"),
     );
 
     expect(response.status).toBe(200);
-    await expect(response.json()).resolves.toEqual(page);
+    const body = (await response.json()) as {
+      data: { id: string }[];
+      meta: { total: number; counts: Record<string, number> };
+    };
+    expect(body.data.map((p) => p.id)).toEqual(["pro_1"]);
+    expect(body.meta.counts).toEqual({ verified: 1 });
     const [url, init] = fetchMock.mock.calls[0] as [URL, RequestInit];
-    expect(url.searchParams.get("search")).toBe("kenji");
+    expect(url.searchParams.get("limit")).toBe("500");
     expect((init.headers as Record<string, string>).Authorization).toBe(
       "Bearer backend-token",
     );
+  });
+
+  it("filters by verification", async () => {
+    signInAs("STAFF");
+    routeFetch({
+      "/hire/professionals/admin": () =>
+        ok({
+          data: [
+            {
+              id: "a",
+              name: "A",
+              title: "",
+              category: "chef",
+              city: "",
+              country: "",
+              isVerified: true,
+              createdAt: "2026-01-02T00:00:00.000Z",
+            },
+            {
+              id: "b",
+              name: "B",
+              title: "",
+              category: "chef",
+              city: "",
+              country: "",
+              isVerified: false,
+              createdAt: "2026-01-01T00:00:00.000Z",
+            },
+          ],
+          meta: {},
+        }),
+    });
+
+    const response = await professionals.GET(
+      get("/api/admin/professionals?status=unverified"),
+    );
+    const body = (await response.json()) as { data: { id: string }[] };
+
+    expect(body.data.map((p) => p.id)).toEqual(["b"]);
   });
 
   it("surfaces an API failure instead of an empty list", async () => {

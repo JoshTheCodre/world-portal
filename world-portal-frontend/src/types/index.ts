@@ -109,7 +109,13 @@ export type AdminUser = {
   avatar?: string;
 };
 
-export type Applicant = { name: string; email: string; phone?: string };
+export type Applicant = {
+  name: string;
+  email: string;
+  phone?: string;
+  /** Opaque link key for `/admin/customers/[key]` — never the email itself. */
+  key?: string;
+};
 
 export type ApplicationEvent = {
   status: VisaStatus | PassportStatus;
@@ -141,15 +147,20 @@ export type VisaApplication = {
   purpose: string;
   nationality: string;
   passportNumber: string;
+  passportExpiryDate: string | null;
+  dateOfBirth: string | null;
+  gender: string | null;
+  residenceAddress: string | null;
   verificationNotes: string | null;
   rejectionReason: string | null;
+  evaluatedBy: string | null;
+  evaluatedAt: string | null;
   reviewedBy: string | null;
   createdAt: string;
   updatedAt: string;
   timeline: ApplicationEvent[];
   documents: SubmittedDocument[];
 };
-
 
 export type PassportApplication = {
   id: string;
@@ -221,6 +232,13 @@ export type Customer = {
   paidByCurrency: Record<string, number>;
   createdAt: string;
   lastActiveAt: string;
+};
+
+/** `GET /api/admin/customers/[key]` — one applicant and everything they've applied for. */
+export type CustomerDetail = {
+  customer: Customer;
+  visas: VisaApplication[];
+  passports: PassportApplication[];
 };
 
 /** `GET /api/admin/search` — the ⌘K palette's groups. No emails: names only. */

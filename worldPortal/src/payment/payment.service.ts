@@ -8,6 +8,7 @@ import {
   forwardRef,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { SendGridService } from '../mail/sendgrid.service';
 import { VisaDocumentationService } from '../visa-documentation/visa-documentation.service';
 import { PassportApplicationService } from '../passport-application/passport-application.service';
 import { InitiatePaymentTransactionDto } from './dto/initiate-payment-transaction.dto';
@@ -16,13 +17,45 @@ import { ConfirmBankTransferDto } from './dto/confirm-bank-transfer.dto';
 import { InitiateRefundDto } from './dto/initiate-refund.dto';
 import { UpdatePaymentConfigDto } from './dto/update-payment-config.dto';
 import { QueryPaymentTransactionDto } from './dto/query-payment-transaction.dto';
+import { QueryRefundDto } from './dto/query-refund.dto';
 import {
   PaymentTransactionStatus,
+  PaymentStatus,
   RefundStatus,
   PaymentOption,
   Prisma,
 } from '@prisma/client';
 import { randomInt } from 'crypto';
+
+/** The money fields every payable application shares (visa and passport). */
+type PayableApplication = {
+  id: string;
+  totalAmount: Prisma.Decimal | null;
+  amountPaid: Prisma.Decimal | null;
+  allowInstallment: boolean;
+};
+
+/**
+ * An application's money after `refunded` is taken back off it (ADR 0016).
+ * `REFUNDED` once nothing is held any more; otherwise whatever the remaining
+ * payment amounts to.
+ */
+export function balancesAfterRefund(app: PayableApplication, refunded: number) {
+  const total = Number(app.totalAmount || 0);
+  const paid = Math.max(0, Number(app.amountPaid || 0) - refunded);
+  const balance = Math.max(0, total - paid);
+  const paymentStatus =
+    paid === 0
+      ? PaymentStatus.REFUNDED
+      : balance === 0
+        ? PaymentStatus.FULLY_PAID
+        : PaymentStatus.PARTIALLY_PAID;
+  return {
+    amountPaid: new Prisma.Decimal(paid),
+    balanceDue: new Prisma.Decimal(balance),
+    paymentStatus,
+  };
+}
 
 @Injectable()
 export class PaymentService {
@@ -34,6 +67,7 @@ export class PaymentService {
     private readonly visaDocService: VisaDocumentationService,
     @Inject(forwardRef(() => PassportApplicationService))
     private readonly passportAppService: PassportApplicationService,
+    private readonly sendGridService: SendGridService,
   ) {}
 
   async getOrCreatePaymentConfig() {
@@ -226,45 +260,98 @@ export class PaymentService {
     return updatedTxn;
   }
 
-  async confirmBankTransferPayment(dto: ConfirmBankTransferDto, adminEmail: string) {
-    if (dto.passportApplicationId) {
-      const passportApp = await this.passportAppService.findApplicationById(dto.passportApplicationId);
+  /**
+   * The checks every bank-transfer confirmation must pass before money is
+   * recorded (ADR 0016): the file is priced, not already paid, the amount fits
+   * the balance, and a half payment is only taken where instalments are on.
+   */
+  private assertBankTransferAllowed(
+    app: PayableApplication,
+    dto: ConfirmBankTransferDto,
+    label: string,
+  ) {
+    if (!app.totalAmount) {
+      throw new BadRequestException(
+        `${label} cost has not been evaluated by an admin yet.`,
+      );
+    }
 
-      if (!passportApp.totalAmount) {
-        throw new BadRequestException('Passport application cost has not been evaluated by an admin yet.');
-      }
+    const balance = Math.max(
+      0,
+      Number(app.totalAmount) - Number(app.amountPaid || 0),
+    );
 
-      const total = Number(passportApp.totalAmount);
-      const paid = Number(passportApp.amountPaid || 0);
-      const balance = Math.max(0, total - paid);
+    if (balance <= 0) {
+      throw new ConflictException(`${label} is already fully paid.`);
+    }
+    if (dto.amount > balance) {
+      throw new ConflictException(
+        `Payment amount (${dto.amount}) cannot exceed the remaining balance due of ${balance}.`,
+      );
+    }
+    if (
+      dto.paymentOption === PaymentOption.HALF_INSTALLMENT &&
+      !app.allowInstallment
+    ) {
+      throw new ConflictException(
+        `${label} does not allow paying in instalments. Record the full amount instead.`,
+      );
+    }
+  }
 
-      if (balance <= 0) {
-        throw new ConflictException('Passport application is already fully paid.');
-      }
-
-      if (dto.amount > balance) {
-        throw new BadRequestException(
-          `Payment amount (${dto.amount}) cannot exceed the remaining balance due of ${balance}.`,
+  /** Writes the confirmed transaction; a reused bank reference is a 409, not a 500. */
+  private async createConfirmedBankTransaction(
+    data: Omit<Prisma.PaymentTransactionUncheckedCreateInput, 'transactionRef'>,
+    bankReference: string | undefined,
+  ) {
+    const transactionRef = bankReference?.trim()
+      ? `BANK-${bankReference.trim().toUpperCase()}`
+      : `TXN-BANK-${randomInt(100000, 999999)}`;
+    try {
+      const transaction = await this.prisma.paymentTransaction.create({
+        data: { ...data, transactionRef },
+      });
+      return { transaction, transactionRef };
+    } catch (error) {
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === 'P2002'
+      ) {
+        throw new ConflictException(
+          'That bank reference has already been recorded. Check the statement, or leave the reference blank.',
         );
       }
+      throw error;
+    }
+  }
 
-      const transactionRef = dto.bankReference?.trim()
-        ? `BANK-${dto.bankReference.trim().toUpperCase()}`
-        : `TXN-BANK-${randomInt(100000, 999999)}`;
+  async confirmBankTransferPayment(
+    dto: ConfirmBankTransferDto,
+    adminEmail: string,
+  ) {
+    const notes = dto.notes?.trim() || null;
 
-      const transaction = await this.prisma.paymentTransaction.create({
-        data: {
-          transactionRef,
-          passportApplicationId: passportApp.id,
-          profileId: passportApp.profileId || null,
-          amount: new Prisma.Decimal(dto.amount),
-          paymentOption: dto.paymentOption,
-          status: PaymentTransactionStatus.CONFIRMED,
-          paymentMethod: 'BANK_TRANSFER',
-          initiatedBy: adminEmail || 'admin-manual',
-          confirmedAt: new Date(),
-        },
-      });
+    if (dto.passportApplicationId) {
+      const passportApp = await this.passportAppService.findApplicationById(
+        dto.passportApplicationId,
+      );
+      this.assertBankTransferAllowed(passportApp, dto, 'Passport application');
+
+      const { transaction, transactionRef } =
+        await this.createConfirmedBankTransaction(
+          {
+            passportApplicationId: passportApp.id,
+            profileId: passportApp.profileId || null,
+            amount: new Prisma.Decimal(dto.amount),
+            paymentOption: dto.paymentOption,
+            status: PaymentTransactionStatus.CONFIRMED,
+            paymentMethod: 'BANK_TRANSFER',
+            notes,
+            initiatedBy: adminEmail || 'admin-manual',
+            confirmedAt: new Date(),
+          },
+          dto.bankReference,
+        );
 
       await this.passportAppService.handlePaymentConfirmed(
         passportApp.id,
@@ -281,54 +368,39 @@ export class PaymentService {
         transactionRef,
         transactionId: transaction.id,
         amount: dto.amount,
-        message: 'Bank transfer payment confirmed successfully. Passport application advanced to Under Review.',
+        message: 'Bank transfer payment confirmed successfully.',
       };
     }
 
     if (!dto.visaDocumentationId) {
-      throw new BadRequestException('Either visaDocumentationId or passportApplicationId is required.');
-    }
-
-    const visaDoc = await this.visaDocService.findVisaApplicationById(dto.visaDocumentationId);
-
-    if (!visaDoc.totalAmount) {
-      throw new BadRequestException('Visa application cost has not been evaluated by an admin yet.');
-    }
-
-    const total = Number(visaDoc.totalAmount);
-    const paid = Number(visaDoc.amountPaid || 0);
-    const balance = Math.max(0, total - paid);
-
-    if (balance <= 0) {
-      throw new ConflictException('Visa application is already fully paid.');
-    }
-
-    if (dto.amount > balance) {
       throw new BadRequestException(
-        `Payment amount (${dto.amount}) cannot exceed the remaining balance due of ${balance}.`,
+        'Either visaDocumentationId or passportApplicationId is required.',
       );
     }
 
-    const transactionRef = dto.bankReference?.trim()
-      ? `BANK-${dto.bankReference.trim().toUpperCase()}`
-      : `TXN-BANK-${randomInt(100000, 999999)}`;
+    const visaDoc = await this.visaDocService.findVisaApplicationById(
+      dto.visaDocumentationId,
+    );
+    this.assertBankTransferAllowed(visaDoc, dto, 'Visa application');
 
-    // Create confirmed PaymentTransaction record
-    const transaction = await this.prisma.paymentTransaction.create({
-      data: {
-        transactionRef,
-        visaDocumentationId: visaDoc.id,
-        profileId: visaDoc.profileId || null,
-        amount: new Prisma.Decimal(dto.amount),
-        paymentOption: dto.paymentOption,
-        status: PaymentTransactionStatus.CONFIRMED,
-        paymentMethod: 'BANK_TRANSFER',
-        initiatedBy: adminEmail || 'admin-manual',
-        confirmedAt: new Date(),
-      },
-    });
+    const { transaction, transactionRef } =
+      await this.createConfirmedBankTransaction(
+        {
+          visaDocumentationId: visaDoc.id,
+          profileId: visaDoc.profileId || null,
+          amount: new Prisma.Decimal(dto.amount),
+          paymentOption: dto.paymentOption,
+          status: PaymentTransactionStatus.CONFIRMED,
+          paymentMethod: 'BANK_TRANSFER',
+          notes,
+          initiatedBy: adminEmail || 'admin-manual',
+          confirmedAt: new Date(),
+        },
+        dto.bankReference,
+      );
 
-    // Invoke VisaDocumentationService to update amountPaid, balanceDue, paymentStatus, and advance to UNDER_REVIEW + send receipt email
+    // Updates amountPaid / balanceDue / paymentStatus, moves a SUBMITTED or
+    // EVALUATED file to UNDER_REVIEW, and sends the receipt email.
     await this.visaDocService.handlePaymentConfirmed(
       visaDoc.id,
       new Prisma.Decimal(dto.amount),
@@ -344,13 +416,14 @@ export class PaymentService {
       transactionRef,
       transactionId: transaction.id,
       amount: dto.amount,
-      message: 'Bank transfer payment confirmed successfully. Application advanced to Under Review.',
+      message: 'Bank transfer payment confirmed successfully.',
     };
   }
 
   async initiateRefund(dto: InitiateRefundDto, adminEmail: string) {
     const transaction = await this.prisma.paymentTransaction.findUnique({
       where: { transactionRef: dto.transactionRef },
+      include: { visaDocumentation: true, passportApplication: true },
     });
 
     if (!transaction) {
@@ -372,6 +445,8 @@ export class PaymentService {
     const netRefundAmount = originalAmount - surchargeAmount;
 
     const refundRef = `RFD-${randomInt(100000, 999999)}`;
+    const visa = transaction.visaDocumentation;
+    const passport = transaction.passportApplication;
 
     const refund = await this.prisma.$transaction(async (tx) => {
       const createdRefund = await tx.paymentRefund.create({
@@ -395,6 +470,20 @@ export class PaymentService {
         },
       });
 
+      // The application must stop claiming the money is still held. Its
+      // review status is untouched: a refund is a money decision only.
+      if (visa) {
+        await tx.visaDocumentation.update({
+          where: { id: visa.id },
+          data: balancesAfterRefund(visa, originalAmount),
+        });
+      } else if (passport) {
+        await tx.passportApplication.update({
+          where: { id: passport.id },
+          data: balancesAfterRefund(passport, originalAmount),
+        });
+      }
+
       return createdRefund;
     });
 
@@ -402,7 +491,104 @@ export class PaymentService {
       `Refund processed by admin=${adminEmail}: refundRef=${refundRef}, transactionRef=${dto.transactionRef}, originalAmount=${originalAmount}, surcharge=${surchargeAmount}, netRefund=${netRefundAmount}`,
     );
 
+    // Sent only after the refund is committed; a mail failure never undoes it.
+    const recipient = visa
+      ? {
+          to: visa.email,
+          name: `${visa.firstName} ${visa.lastName}`,
+          app: visa,
+        }
+      : passport
+        ? {
+            to: passport.email,
+            name: `${passport.firstName} ${passport.surname}`,
+            app: passport,
+          }
+        : null;
+    if (recipient) {
+      this.sendGridService
+        .sendRefundProcessedEmail({
+          to: recipient.to,
+          recipientName: recipient.name,
+          applicationNo: recipient.app.applicationNo,
+          refundRef,
+          originalAmount,
+          surchargeAmount,
+          netRefundAmount,
+          reason: dto.reason,
+          currency: recipient.app.currency,
+        })
+        .catch((err: unknown) => {
+          this.logger.error(
+            `Refund email failed for refundRef=${refundRef}: ${err instanceof Error ? err.message : String(err)}`,
+          );
+        });
+    }
+
     return refund;
+  }
+
+  /** Paged refunds with their transaction reference and currency (ADR 0016). */
+  async findAllRefunds(query: QueryRefundDto) {
+    const page = query.page ?? 1;
+    const limit = query.limit ?? 20;
+    const search = query.search?.trim();
+
+    const where: Prisma.PaymentRefundWhereInput = search
+      ? {
+          OR: [
+            { refundRef: { contains: search, mode: 'insensitive' } },
+            { reason: { contains: search, mode: 'insensitive' } },
+            {
+              transaction: {
+                transactionRef: { contains: search, mode: 'insensitive' },
+              },
+            },
+          ],
+        }
+      : {};
+
+    const [total, rows] = await this.prisma.$transaction([
+      this.prisma.paymentRefund.count({ where }),
+      this.prisma.paymentRefund.findMany({
+        where,
+        orderBy: { createdAt: 'desc' },
+        skip: (page - 1) * limit,
+        take: limit,
+        include: {
+          transaction: {
+            select: {
+              transactionRef: true,
+              visaDocumentation: {
+                select: { currency: true, applicationNo: true },
+              },
+              passportApplication: {
+                select: { currency: true, applicationNo: true },
+              },
+            },
+          },
+        },
+      }),
+    ]);
+
+    return {
+      data: rows.map(({ transaction, ...refund }) => {
+        const app =
+          transaction.visaDocumentation ?? transaction.passportApplication;
+        return {
+          ...refund,
+          transactionRef: transaction.transactionRef,
+          applicationNo: app?.applicationNo ?? null,
+          currency: app?.currency ?? 'NGN',
+        };
+      }),
+      meta: {
+        total,
+        page,
+        limit,
+        pages: Math.max(1, Math.ceil(total / limit)),
+      },
+    };
   }
 
   async findAllTransactions(query: QueryPaymentTransactionDto) {
@@ -445,7 +631,12 @@ export class PaymentService {
    */
   async createPackageCheckout(dto: {
     email: string;
-    items: Array<{ type: string; title: string; entityId?: string; amount: number }>;
+    items: Array<{
+      type: string;
+      title: string;
+      entityId?: string;
+      amount: number;
+    }>;
     totalAmount: number;
     currency?: string;
   }) {
@@ -463,7 +654,9 @@ export class PaymentService {
       },
     });
 
-    this.logger.log(`Created package checkout transactionRef=${transactionRef} for email=${dto.email}`);
+    this.logger.log(
+      `Created package checkout transactionRef=${transactionRef} for email=${dto.email}`,
+    );
     return {
       transactionRef: transaction.transactionRef,
       amount: Number(transaction.amount),
@@ -473,4 +666,3 @@ export class PaymentService {
     };
   }
 }
-

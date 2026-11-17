@@ -7,10 +7,18 @@ import { OtpService } from '../otp/otp.service';
 import {
   VisaDocumentStatus,
   PaymentStatus,
+  PaymentOption,
   VisaCategory,
   Gender,
   Prisma,
 } from '@prisma/client';
+import { ConflictException } from '@nestjs/common';
+
+/** A mock's first-call argument, typed: `mock.calls` is `any` in jest's own types. */
+type CallArgs = { where?: unknown; data: Record<string, unknown> };
+function firstArg(mock: jest.Mock): CallArgs {
+  return (mock.mock.calls as unknown as CallArgs[][])[0][0];
+}
 
 describe('VisaDocumentationService', () => {
   let service: VisaDocumentationService;
@@ -197,6 +205,110 @@ describe('VisaDocumentationService', () => {
       expect(result.status).toBe(VisaDocumentStatus.EVALUATED);
       expect(result.paymentStatus).toBe(PaymentStatus.AWAITING_PAYMENT);
     });
+
+    // ADR 0016
+    it('keeps a payment already recorded when the price changes', async () => {
+      mockPrismaService.visaDocumentation.findFirst.mockResolvedValue({
+        ...mockVisaRecord,
+        amountPaid: new Prisma.Decimal(100),
+        paymentStatus: PaymentStatus.AWAITING_PAYMENT,
+      });
+      mockPrismaService.visaDocumentation.update.mockResolvedValue(
+        mockVisaRecord,
+      );
+
+      await service.evaluateVisaCost(
+        'visa-uuid-001',
+        { totalAmount: 600 },
+        'manager@loveworld.com',
+      );
+
+      const { data } = firstArg(mockPrismaService.visaDocumentation.update);
+      expect(Number(data.amountPaid)).toBe(100);
+      expect(Number(data.balanceDue)).toBe(500);
+    });
+
+    it.each([PaymentStatus.PARTIALLY_PAID, PaymentStatus.FULLY_PAID])(
+      'refuses to re-price once the applicant has paid (%s)',
+      async (paymentStatus) => {
+        mockPrismaService.visaDocumentation.findFirst.mockResolvedValue({
+          ...mockVisaRecord,
+          paymentStatus,
+        });
+
+        await expect(
+          service.evaluateVisaCost(
+            'visa-uuid-001',
+            { totalAmount: 600 },
+            'manager@loveworld.com',
+          ),
+        ).rejects.toThrow(ConflictException);
+        expect(
+          mockPrismaService.visaDocumentation.update,
+        ).not.toHaveBeenCalled();
+      },
+    );
+
+    it.each([
+      VisaDocumentStatus.UNDER_REVIEW,
+      VisaDocumentStatus.APPROVED,
+      VisaDocumentStatus.REJECTED,
+    ])('refuses to re-price a file that is %s', async (status) => {
+      mockPrismaService.visaDocumentation.findFirst.mockResolvedValue({
+        ...mockVisaRecord,
+        status,
+      });
+
+      await expect(
+        service.evaluateVisaCost(
+          'visa-uuid-001',
+          { totalAmount: 600 },
+          'manager@loveworld.com',
+        ),
+      ).rejects.toThrow(ConflictException);
+    });
+  });
+
+  describe('handlePaymentConfirmed', () => {
+    it('moves an evaluated file into review', async () => {
+      mockPrismaService.visaDocumentation.findFirst.mockResolvedValue(
+        mockVisaRecord,
+      );
+      mockPrismaService.visaDocumentation.update.mockResolvedValue(
+        mockVisaRecord,
+      );
+
+      await service.handlePaymentConfirmed(
+        'visa-uuid-001',
+        new Prisma.Decimal(500),
+        PaymentOption.FULL,
+      );
+
+      const { data } = firstArg(mockPrismaService.visaDocumentation.update);
+      expect(data.status).toBe(VisaDocumentStatus.UNDER_REVIEW);
+      expect(data.paymentStatus).toBe(PaymentStatus.FULLY_PAID);
+    });
+
+    // ADR 0016
+    it('never drags an approved file back into review', async () => {
+      mockPrismaService.visaDocumentation.findFirst.mockResolvedValue({
+        ...mockVisaRecord,
+        status: VisaDocumentStatus.APPROVED,
+        amountPaid: new Prisma.Decimal(250),
+      });
+      mockPrismaService.visaDocumentation.update.mockResolvedValue(
+        mockVisaRecord,
+      );
+
+      await service.handlePaymentConfirmed(
+        'visa-uuid-001',
+        new Prisma.Decimal(250),
+        PaymentOption.HALF_INSTALLMENT,
+      );
+
+      const { data } = firstArg(mockPrismaService.visaDocumentation.update);
+      expect(data.status).toBe(VisaDocumentStatus.APPROVED);
+    });
   });
 
   describe('inviteApplicant', () => {
@@ -215,7 +327,9 @@ describe('VisaDocumentationService', () => {
 
       await expect(
         service.inviteApplicant('visa-uuid-001', dto, 'staff@worldportal.com'),
-      ).rejects.toThrow('Invitations can only be issued starting from UNDER_REVIEW status');
+      ).rejects.toThrow(
+        'Invitations can only be issued starting from UNDER_REVIEW status',
+      );
     });
 
     it('should update notes and trigger email when in UNDER_REVIEW status', async () => {
@@ -248,4 +362,3 @@ describe('VisaDocumentationService', () => {
     });
   });
 });
-

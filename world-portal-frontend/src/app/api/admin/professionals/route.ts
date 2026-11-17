@@ -4,41 +4,87 @@ import { z } from "zod";
 
 import { backend } from "@/server/api/backend";
 import { DESK_ROLES, requireRole } from "@/server/auth";
-import { backendErrorResponse, parseBody } from "@/server/http";
+import { byDate, byText, listResponse, type ListSpec } from "@/server/data/list";
+import { backendErrorResponse, parseBody, readListParams } from "@/server/http";
 
-const listQuerySchema = z.object({
-  search: z.string().trim().max(120).optional(),
-  category: z.string().trim().max(60).optional(),
-  page: z.coerce.number().int().min(1).optional(),
-  limit: z.coerce.number().int().min(1).max(100).optional(),
-});
+const categorySchema = z.string().trim().max(60).optional();
 
 const verifySchema = z.object({ isVerified: z.boolean() });
 
 const professionalIdSchema = z.string().trim().min(1).max(120);
 
+/** The whole directory in one request — the service sets no upper bound on `limit`. */
+const FETCH_LIMIT = 500;
+
+type ProfessionalRow = {
+  id: string;
+  name: string;
+  title: string;
+  category: string;
+  bio?: string | null;
+  city: string;
+  country: string;
+  isVerified: boolean;
+  createdAt: string;
+};
+
+const spec: ListSpec<ProfessionalRow> = {
+  statusOf: (pro) => (pro.isVerified ? "verified" : "unverified"),
+  dateOf: (pro) => pro.createdAt,
+  sorters: {
+    name: byText((pro) => pro.name),
+    createdAt: byDate((pro) => pro.createdAt),
+  },
+  defaultSort: { key: "createdAt", dir: "desc" },
+  csv: {
+    filename: "professionals",
+    columns: [
+      { header: "Name", value: (pro) => pro.name },
+      { header: "Title", value: (pro) => pro.title },
+      { header: "Category", value: (pro) => pro.category },
+      { header: "City", value: (pro) => pro.city },
+      { header: "Country", value: (pro) => pro.country },
+      { header: "Verified", value: (pro) => (pro.isVerified ? "Yes" : "No") },
+    ],
+  },
+};
+
 /**
- * Goes through `backend()` like every other console route: the session's
- * token is forwarded, the envelope is unwrapped, and a failure surfaces as
- * the service's own status instead of an empty list.
+ * The service's admin list ignores `search` and `category` (it only pages),
+ * so the console's filters used to do nothing. The whole directory is read
+ * once and filtered, counted and paged here, like every other console list.
  */
 export async function GET(request: Request) {
   const { session, response } = await requireRole(DESK_ROLES);
   if (response) return response;
 
-  const query = listQuerySchema.safeParse(
-    Object.fromEntries(new URL(request.url).searchParams),
+  const { params, response: invalid } = readListParams(request);
+  if (invalid) return invalid;
+  const category = categorySchema.safeParse(
+    new URL(request.url).searchParams.get("category") ?? undefined,
   );
-  if (!query.success) {
+  if (!category.success) {
     return NextResponse.json({ message: "Invalid filters" }, { status: 422 });
   }
 
   try {
-    const result = await backend<unknown>("/hire/professionals/admin", {
-      token: session.token,
-      query: query.data,
-    });
-    return NextResponse.json(result);
+    const result = await backend<{ data: ProfessionalRow[] }>(
+      "/hire/professionals/admin",
+      {
+        token: session.token,
+        query: { limit: FETCH_LIMIT },
+      },
+    );
+    const q = params.q?.toLowerCase();
+    const rows = result.data.filter(
+      (pro) =>
+        (!category.data || pro.category === category.data) &&
+        (!q ||
+          [pro.name, pro.title, pro.city, pro.country, pro.bio ?? ""].some((field) =>
+            field.toLowerCase().includes(q),
+          )),
+    );
+    return listResponse(rows, params, spec);
   } catch (error) {
     return backendErrorResponse(error);
   }

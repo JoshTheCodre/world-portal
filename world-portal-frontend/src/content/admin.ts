@@ -19,12 +19,56 @@ export const login = {
   },
 } as const;
 
+/** Settings → team (`features/settings/components/team-list.tsx`, invite modal). */
+export const team = {
+  searchPlaceholder: "Search the team",
+  you: "You",
+  noMatches: "No one matches that search.",
+  forbidden: "Only a manager can see and manage the full team list.",
+  loadFailed: "Could not load the team",
+  active: "Active",
+  deactivated: "Deactivated",
+  actions: (name: string) => `Manage ${name}`,
+  changeRole: "Change role",
+  roleChanged: (name: string, role: string) => `${name} is now ${role}`,
+  deactivate: "Deactivate",
+  reactivate: "Reactivate",
+  reactivated: (name: string) => `${name} can sign in again`,
+  deactivateTitle: (name: string) => `Deactivate ${name}?`,
+  deactivateBody:
+    "They lose access to the console straight away. Their past work stays on record, and you can reactivate them later.",
+  deactivateConfirm: "Deactivate",
+  deactivatedToast: (name: string) => `${name} has been deactivated`,
+  resendInvite: "Resend invite",
+  inviteResent: (email: string) => `Invite sent again to ${email}`,
+  genericError: "That didn't go through. Try again in a moment.",
+  invite: {
+    trigger: "Invite team member",
+    title: "Invite a team member",
+    body: "They get an email with their role. Managers see everything; staff work applications; partners only see what they submit.",
+    firstName: "First name",
+    lastName: "Last name",
+    email: "Work email",
+    role: "Role",
+    roles: {
+      MANAGER: "Manager — everything, including money and the team",
+      STAFF: "Staff — works visa and passport applications",
+      PARTNER: "Partner — an outside agency submitting applications",
+    },
+    submit: "Send invitation",
+    cancel: "Cancel",
+    sent: (email: string) => `Invitation sent to ${email}`,
+  },
+} as const;
+
 /** Settings → bank accounts applicants pay into. */
 export const bankAccounts = {
   loadFailed: "Could not load bank accounts",
   genericError: "That didn't go through. Try again in a moment.",
   toggled: (bank: string, active: boolean) =>
-    active ? `${bank} is active — applicants will see it` : `${bank} is hidden from applicants`,
+    active
+      ? `${bank} is active — applicants will see it`
+      : `${bank} is hidden from applicants`,
   deleted: (bank: string) => `${bank} account deleted`,
   deleteTitle: (bank: string) => `Delete the ${bank} account?`,
   deleteBody:
@@ -37,6 +81,73 @@ export const agencies = {
   headingLead: "Agency",
   headingAccent: "verification.",
   body: "Registered partner agencies: check their paperwork, review what they offer, and decide who goes live.",
+  searchPlaceholder: "Search by name, registration number or country",
+  filterLabel: "Filter by verification",
+  verificationLabels: {
+    unverified: "Unverified",
+    pending: "Awaiting review",
+    verified: "Verified",
+    suspended: "Suspended",
+  } as Record<string, string>,
+  listingLabels: {
+    draft: "Draft",
+    submitted: "Submitted",
+    in_review: "In review",
+    live: "Live",
+    rejected: "Off the platform",
+    paused: "Paused",
+  } as Record<string, string>,
+  documentLabels: {
+    missing: "Missing",
+    uploaded: "Uploaded",
+    in_review: "In review",
+    approved: "Approved",
+    rejected: "Rejected",
+  } as Record<string, string>,
+  loadFailed: "Could not load agencies",
+  empty: {
+    title: "No agencies found",
+    body: "Nothing matches these filters. Clear the search or pick another status.",
+  },
+  staff: (n: number) => `${n} staff`,
+  paperwork: (approved: number, total: number) =>
+    `Paperwork ${approved}/${total} approved`,
+  viewDetails: "View details",
+  verify: "Verify",
+  verifyTitle: (name: string) => `Verify ${name}?`,
+  verifyBody:
+    "Every document they've uploaded is marked approved and their listing goes live, so travellers can book them.",
+  verifyConfirm: "Verify and go live",
+  verified: (name: string) => `${name} is verified and live`,
+  suspend: "Suspend",
+  suspendTitle: (name: string) => `Suspend ${name}?`,
+  suspendBody:
+    "Their listing comes off the platform straight away, so travellers can't book them. You can verify them again later.",
+  suspendConfirm: "Suspend agency",
+  suspended: (name: string) => `${name} has been suspended`,
+  failed: "That didn't go through, so nothing changed. Try again in a moment.",
+  sections: {
+    services: "Categories & services",
+    languages: "Languages",
+    about: "About",
+    paperwork: "Paperwork",
+    staff: (n: number) => `Staff (${n})`,
+  },
+  notProvided: "Not provided",
+  founded: (year: number) => `Founded ${year}`,
+  noPaperwork: "No paperwork submitted yet.",
+  approveDoc: "Approve",
+  rejectDoc: "Reject",
+  docApproved: (label: string) => `${label} approved`,
+  rejectTitle: (label: string) => `Reject ${label}?`,
+  rejectBody:
+    "The agency sees your reason in their portal and can upload a corrected file.",
+  rejectReasonLabel: "Reason (the agency will read this)",
+  rejectReasonPlaceholder: "e.g. The scan is blurry, or the certificate has expired",
+  rejectConfirm: "Reject document",
+  docRejected: (label: string) => `${label} rejected. The agency has been told why.`,
+  rejectionNote: "Why it was rejected:",
+  listing: "Listing",
 } as const;
 
 export const professionals = {
@@ -44,6 +155,53 @@ export const professionals = {
   headingLead: "Professional",
   headingAccent: "moderation.",
   body: "Destination professionals listed on Hire: verify identity and qualifications before their profile shows a badge.",
+  searchPlaceholder: "Search by name, title, city or bio",
+  filterLabel: "Filter by verification",
+  categoryLabel: "Category",
+  allCategories: "All categories",
+  categories: {
+    photographer: "Photographer",
+    videographer: "Videographer",
+    chef: "Chef & catering",
+    interpreter: "Interpreter",
+    security: "Security",
+    childcare: "Childcare",
+    event: "Event planner",
+    freelancer: "Freelancer / other",
+  } as Record<string, string>,
+  statusLabels: { verified: "Verified", unverified: "Unverified" } as Record<
+    string,
+    string
+  >,
+  loadFailed: "Could not load professionals",
+  empty: {
+    title: "No professionals found",
+    body: "Nothing matches these filters. Clear the search or pick another category.",
+  },
+  jobs: (n: number) => `${n} jobs completed`,
+  perHour: "/ hr",
+  viewDetails: "View details",
+  verify: "Verify",
+  verified: (name: string) => `${name} now shows a verified badge`,
+  revoke: "Remove badge",
+  revokeTitle: (name: string) => `Remove ${name}'s verified badge?`,
+  revokeBody:
+    "Travellers will see their profile as unverified straight away. You can verify them again later.",
+  revokeConfirm: "Remove badge",
+  revoked: (name: string) => `${name} is no longer marked verified`,
+  failed: "That didn't go through, so nothing changed. Try again in a moment.",
+  sections: {
+    rate: "Hourly rate",
+    location: "Location",
+    contact: "Contact",
+    about: (name: string) => `About ${name}`,
+    languages: "Languages",
+    skills: "Specialties",
+  },
+  noBio: "No biography yet.",
+  notProvided: "Not provided",
+  rating: (value: string) => `${value} rating`,
+  profileId: "Profile ID",
 } as const;
 
 /** Dashboard charts (`features/dashboard/components/*`). */
@@ -127,7 +285,8 @@ export const documentViewer = {
 /** Detail pages whose record did not load — see `DetailLoadError`. */
 export const detailErrors = {
   notFoundTitle: (noun: string) => `This ${noun} doesn't exist`,
-  notFoundBody: "The link may be wrong, or the file was removed. Nothing has changed on it.",
+  notFoundBody:
+    "The link may be wrong, or the file was removed. Nothing has changed on it.",
   failedTitle: (noun: string) => `Could not load this ${noun}`,
   failedBody: "The service didn't answer. Try again in a moment.",
   retry: "Try again",
@@ -209,6 +368,121 @@ export const passports = {
   },
 } as const;
 
+/** Status changes and pricing on a visa or passport file (`status-actions.tsx`, `evaluate-cost-form.tsx`). */
+export const caseWorkflow = {
+  title: "Next step",
+  current: "Current stage",
+  final: (stage: string) =>
+    `This file is ${stage.toLowerCase()}. That's final, so there are no further steps.`,
+  waitingForCost:
+    "Set the cost first, or start the review if it's already been paid offline.",
+  actions: {
+    UNDER_REVIEW: "Start review",
+    APPROVED: "Approve",
+    REJECTED: "Reject",
+  } as Record<string, string>,
+  confirm: {
+    UNDER_REVIEW: {
+      title: (ref: string) => `Start reviewing ${ref}?`,
+      body: "The applicant's tracking page will show it as under review.",
+      action: "Start review",
+    },
+    APPROVED: {
+      title: (name: string) => `Approve ${name}'s application?`,
+      body: "The applicant is emailed that it's approved. This is final: the file can't be moved to another stage afterwards.",
+      action: "Approve and email",
+    },
+    REJECTED: {
+      title: (name: string) => `Reject ${name}'s application?`,
+      body: "The applicant is emailed your reason. This is final: the file can't be moved to another stage afterwards.",
+      action: "Reject and email",
+    },
+  },
+  noteLabel: "Note for the file (optional)",
+  notePlaceholder: "What you checked, or what happens next",
+  reasonLabel: "Reason (the applicant will read this)",
+  reasonPlaceholder: "e.g. The bank statement doesn't cover the last six months",
+  done: {
+    UNDER_REVIEW: "Review started",
+    APPROVED: "Approved. The applicant has been emailed.",
+    REJECTED: "Rejected. The applicant has been emailed the reason.",
+  } as Record<string, string>,
+  failed: "Could not update the file",
+  evaluate: {
+    locked: "The cost is fixed: the applicant has already paid towards it.",
+    closed: (stage: string) =>
+      `The cost can't be changed once a file is ${stage.toLowerCase()}.`,
+    confirmTitle: (amount: string) => `Bill the applicant ${amount}?`,
+    confirmBody: (name: string, instalment: string | null) =>
+      instalment
+        ? `${name} is emailed the total and how to pay. They can pay ${instalment} now and the rest later. You can change the amount until they pay.`
+        : `${name} is emailed the total and how to pay. You can change the amount until they pay.`,
+    confirmAction: "Save and email",
+    done: "Cost saved. The applicant has been emailed the amount due.",
+    failed: "Could not save the cost",
+  },
+} as const;
+
+/** Recording a bank transfer (`confirm-bank-payment-modal.tsx`). */
+export const bankPayment = {
+  title: "Bank transfer",
+  body: "Record a transfer once you can see it in the bank account.",
+  outstanding: "Outstanding",
+  trigger: "Record a payment",
+  dialogTitle: "Record a bank transfer",
+  dialogBody:
+    "This updates the applicant's balance, moves the file to Under review and emails them a receipt.",
+  option: "What did they pay?",
+  full: "The full balance",
+  half: "50% instalment",
+  halfUnavailable: (allowed: boolean) =>
+    allowed ? "Already paid an instalment" : "Instalments weren't allowed",
+  amount: (currency: string) => `Amount received (${currency})`,
+  overBalance: (balance: string) => `That's more than the ${balance} still owed.`,
+  reference: "Bank reference",
+  referenceHint:
+    "Each reference can be recorded once, so a transfer is never counted twice.",
+  notes: "Note for the file (optional)",
+  notesPlaceholder: "e.g. Seen on the GTBank statement for 14 May",
+  cancel: "Cancel",
+  submit: "Record payment",
+  done: (amount: string) =>
+    `${amount} recorded. The applicant has been emailed a receipt.`,
+  failed: "Could not record the payment",
+} as const;
+
+/** Inviting an applicant to an appointment (`invite-applicant-modal.tsx`). */
+export const appointmentInvite = {
+  title: "Appointment",
+  body: (name: string) =>
+    `Invite ${name} for biometrics, an interview or a document check.`,
+  hint: "They're emailed the date, time and venue.",
+  trigger: "Invite applicant",
+  dialogTitle: "Invite to an appointment",
+  dialogBody: (email: string) => `The invitation is emailed to ${email}.`,
+  purpose: "What it's for",
+  purposes: [
+    "Biometric data capture",
+    "Document verification",
+    "Visa interview",
+    "Passport submission or pick-up",
+    "Medical and security screening",
+  ],
+  otherPurpose: "Something else",
+  customPurpose: "Describe it",
+  customPurposePlaceholder: "e.g. Collect the original bank statement",
+  date: "Date",
+  time: "Time",
+  venue: "Venue",
+  defaultVenue: "Embassy Headquarters, Room 302",
+  note: "Instructions (optional)",
+  notePlaceholder: "e.g. Bring your original passport and two photographs",
+  cancel: "Cancel",
+  submit: "Send invitation",
+  done: (email: string) => `Invitation emailed to ${email}`,
+  failed: "Could not send the invitation",
+} as const;
+
 export const applications = {
   headingLead: "Visa",
   headingAccent: "applications.",
@@ -243,6 +517,16 @@ export const applications = {
     installmentLabel: "Allow a 50% instalment",
     evaluateAction: "Save evaluation",
     reply: "Email the applicant",
+    phone: "Phone",
+    dateOfBirth: "Date of birth",
+    gender: "Gender",
+    passportExpiry: "Passport expires",
+    expiresSoon: "less than six months after return",
+    address: "Residence address",
+    evaluatedBy: "Priced by",
+    reviewedBy: "Reviewed by",
+    notGiven: "Not given",
+    notYet: "Not yet",
   },
 } as const;
 
@@ -257,6 +541,30 @@ export const customers = {
   },
   copyEmails: "Copy emails",
   emailsCopied: (n: number) => `${n} email${n === 1 ? "" : "s"} copied`,
+  detail: {
+    back: "All applicants",
+    eyebrow: "Applicant",
+    email: "Email",
+    phone: "Phone",
+    country: "Country",
+    firstSeen: "First applied",
+    lastActive: "Last active",
+    paid: "Paid to date",
+    nothingPaid: "Nothing yet",
+    visas: (n: number) => `Visa applications (${n})`,
+    passports: (n: number) => `Passport applications (${n})`,
+    noVisas: "No visa applications.",
+    noPassports: "No passport applications.",
+    reference: "Reference",
+    destination: "Destination",
+    category: "Category",
+    stage: "Stage",
+    payment: "Payment",
+    cost: "Cost",
+    submitted: "Submitted",
+    notPriced: "Not priced",
+    open: (ref: string) => `Open ${ref}`,
+  },
 } as const;
 
 export const settings = {
@@ -298,17 +606,77 @@ export const finance = {
   headingLead: "Financial",
   headingAccent: "operations.",
   body: "Transactions, refund requests and platform fee configuration.",
-  searchPlaceholder: "Search by transaction ref, applicant or email",
+  searchPlaceholder: "Search by transaction reference or method",
+  refundSearchPlaceholder: "Search by refund or transaction reference, or reason",
   tabs: {
     transactions: "Transactions",
-    refunds: "Refund Requests",
+    refunds: "Refunds",
     config: "Fee Settings",
   },
   cards: {
+    revenue: "Collected",
+    revenueCaption: "Confirmed payments",
+    outstanding: "Outstanding",
     outstandingCaption: "Still owed on evaluated applications",
+    refunds: "Refunds",
+    refundsCaption: (volume: string) => `${volume} returned`,
     serviceFee: "Service fee",
     serviceFeeCaption: "As set in Fee Settings",
     surcharge: "Surcharge",
+  },
+  transactionStatusLabels: {
+    INITIATED: "Awaiting payment",
+    CONFIRMED: "Confirmed",
+    FAILED: "Failed",
+    REFUNDED: "Refunded",
+  } as Record<string, string>,
+  refundStatusLabels: {
+    REQUESTED: "Requested",
+    APPROVED: "Approved",
+    PROCESSED: "Processed",
+    REJECTED: "Rejected",
+  } as Record<string, string>,
+  paymentOptionLabels: {
+    FULL: "Full payment",
+    HALF_INSTALLMENT: "50% instalment",
+  } as Record<string, string>,
+  loadFailed: {
+    transactions: "Could not load transactions",
+    refunds: "Could not load refunds",
+    config: "Could not load the fee settings",
+  },
+  refundsEmpty: {
+    title: "No refunds yet",
+    body: "Refunds start from a confirmed transaction: open its menu and choose Refund.",
+  },
+  refund: {
+    action: "Refund",
+    title: (ref: string) => `Refund ${ref}?`,
+    body: (original: string, surcharge: string, net: string) =>
+      `The applicant paid ${original}. After the ${surcharge} refund charge they get ${net} back. Their application will show the payment as refunded and they'll be emailed. This can't be undone.`,
+    reasonLabel: "Reason (the applicant will read this)",
+    confirm: (net: string) => `Refund ${net}`,
+    done: (net: string) =>
+      `Refund of ${net} processed — the applicant has been emailed`,
+    managerOnly: "Only a manager can refund.",
+  },
+  fees: {
+    title: "Platform fee rates",
+    body: "Used when pricing applications and when calculating refunds.",
+    partnerMarkup: "Partner agency markup (%)",
+    partnerMarkupHint: "Added to partner-referred visa processing.",
+    serviceFee: "Service fee (%)",
+    serviceFeeHint: "Platform processing fee on public submissions.",
+    refundSurcharge: "Refund charge (%)",
+    refundSurchargeHint: "Kept from the original payment when a refund is issued.",
+    save: "Save fee settings",
+    saved: "Fee settings saved",
+    managerOnly: "Only a manager can change fee settings.",
+    lastUpdated: (by: string, when: string) => `Last changed by ${by}, ${when}`,
+    rulesTitle: "How these are used",
+    instalmentRule:
+      "50% instalment: when allowed at pricing, the applicant pays half up front and the rest before release.",
+    refundRule: "Refund = original payment − (original payment × refund charge %).",
   },
   /** Shown in place of a figure the service did not return — never a guess. */
   unavailable: "—",
@@ -317,7 +685,6 @@ export const finance = {
     body: "Try adjusting your search query or filters.",
   },
 } as const;
-
 
 export const visaStatusLabels: Record<VisaStatus, string> = {
   SUBMITTED: "Submitted",

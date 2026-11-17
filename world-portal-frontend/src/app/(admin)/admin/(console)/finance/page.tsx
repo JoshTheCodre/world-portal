@@ -21,7 +21,7 @@ export default async function FinancePage() {
         body={copy.body}
       />
       <RoleGate href="/admin/finance">
-        <FinanceView />
+        <FinanceView role={session.role} />
       </RoleGate>
     </div>
   );

@@ -120,6 +120,7 @@ export function CustomersTable() {
         rows={data?.data}
         getRowId={(c) => c.id}
         getRowLabel={(c) => c.name}
+        getRowHref={(c) => `/admin/customers/${c.id}`}
         isPending={isPending}
         isError={isError}
         error={error}

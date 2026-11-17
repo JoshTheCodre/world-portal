@@ -9,6 +9,7 @@ import {
 } from "@/server/agency/store";
 import { DESK_ROLES, requireRole } from "@/server/auth";
 import { parseBody } from "@/server/http";
+import { rejectionNoteSchema } from "@/validations/admin";
 
 const listQuerySchema = z.object({
   search: z.string().trim().max(120).optional(),
@@ -20,11 +21,19 @@ const listQuerySchema = z.object({
 
 /** Either a document decision or an agency verification — never both. */
 const patchSchema = z.union([
-  z.object({
-    docId: z.string().trim().min(1).max(120),
-    docStatus: z.string().trim().min(1).max(40),
-    note: z.string().trim().max(1000).optional(),
-  }),
+  z
+    .object({
+      docId: z.string().trim().min(1).max(120),
+      docStatus: z.string().trim().min(1).max(40),
+      note: z.string().trim().max(1000).optional(),
+    })
+    // A rejection without a reason leaves the agency guessing what to fix.
+    .refine(
+      (body) =>
+        body.docStatus.toLowerCase() !== "rejected" ||
+        rejectionNoteSchema.safeParse(body.note ?? "").success,
+      { message: "Give the agency a reason of at least 10 characters", path: ["note"] },
+    ),
   z
     .object({
       verification: z.string().trim().min(1).max(40).optional(),

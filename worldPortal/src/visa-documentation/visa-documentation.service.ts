@@ -3,6 +3,7 @@ import {
   Logger,
   NotFoundException,
   BadRequestException,
+  ConflictException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateVisaDocumentationDto } from './dto/create-visa-documentation.dto';
@@ -35,7 +36,6 @@ export class VisaDocumentationService {
     private readonly bankAccountService: BankAccountService,
     private readonly otpService: OtpService,
   ) {}
-
 
   /**
    * `owner` is the signed-in WorldStreet applicant. Their verified email
@@ -159,7 +159,6 @@ export class VisaDocumentationService {
       }
 
       return record;
-
     } catch (error) {
       if (
         error instanceof Prisma.PrismaClientKnownRequestError &&
@@ -173,14 +172,15 @@ export class VisaDocumentationService {
     }
   }
 
-  private async resolveReviewerDisplayName(emailOrName: string): Promise<string> {
+  private async resolveReviewerDisplayName(
+    emailOrName: string,
+  ): Promise<string> {
     if (!emailOrName) return 'Admin Consultant';
     if (!emailOrName.includes('@')) return emailOrName;
 
     const profile = await Promise.resolve(
       this.prisma.profile?.findUnique({ where: { email: emailOrName } }),
     ).catch(() => null);
-
 
     if (profile && (profile.firstName || profile.lastName)) {
       return `${profile.firstName} ${profile.lastName}`.trim();
@@ -201,6 +201,26 @@ export class VisaDocumentationService {
   ) {
     const record = await this.findVisaApplicationById(id);
 
+    // ADR 0016: a price is set while the file waits for one, never after the
+    // applicant has paid against it or a decision has been made. Re-pricing
+    // used to reset amountPaid to 0, erasing the record of the payment.
+    if (
+      record.status !== VisaDocumentStatus.SUBMITTED &&
+      record.status !== VisaDocumentStatus.EVALUATED
+    ) {
+      throw new ConflictException(
+        `This application is ${record.status.toLowerCase().replace('_', ' ')} — its price can no longer be changed.`,
+      );
+    }
+    if (
+      record.paymentStatus === PaymentStatus.PARTIALLY_PAID ||
+      record.paymentStatus === PaymentStatus.FULLY_PAID
+    ) {
+      throw new ConflictException(
+        'The applicant has already paid against this price. Refund the payment before changing it.',
+      );
+    }
+
     const currency = dto.currency?.toUpperCase() || 'USD';
     const evaluatorName = await this.resolveReviewerDisplayName(evaluatorEmail);
 
@@ -210,14 +230,18 @@ export class VisaDocumentationService {
 
     const allowInstallment = dto.allowInstallment ?? false;
     const totalAmountDecimal = new Prisma.Decimal(dto.totalAmount);
+    // Whatever was already recorded stays recorded.
+    const alreadyPaid = Number(record.amountPaid || 0);
 
     const updated = await this.prisma.visaDocumentation.update({
       where: { id: record.id },
       data: {
         totalAmount: totalAmountDecimal,
         currency,
-        balanceDue: totalAmountDecimal,
-        amountPaid: new Prisma.Decimal(0.0),
+        balanceDue: new Prisma.Decimal(
+          Math.max(0, dto.totalAmount - alreadyPaid),
+        ),
+        amountPaid: new Prisma.Decimal(alreadyPaid),
         allowInstallment,
         paymentStatus: PaymentStatus.AWAITING_PAYMENT,
         status: VisaDocumentStatus.EVALUATED,
@@ -227,7 +251,9 @@ export class VisaDocumentationService {
     });
 
     // Fetch active bank accounts to include in payment email
-    const activeBankAccounts = await this.bankAccountService.findActive().catch(() => []);
+    const activeBankAccounts = await this.bankAccountService
+      .findActive()
+      .catch(() => []);
 
     // Send evaluation email via SendGrid
     this.sendGridService
@@ -253,7 +279,9 @@ export class VisaDocumentationService {
         })),
       })
       .catch((err) => {
-        this.logger.error(`SendGrid cost evaluation email error: ${err?.message}`);
+        this.logger.error(
+          `SendGrid cost evaluation email error: ${err instanceof Error ? err.message : String(err)}`,
+        );
       });
 
     return updated;
@@ -280,8 +308,16 @@ export class VisaDocumentationService {
       newPaymentStatus = PaymentStatus.PARTIALLY_PAID;
     }
 
+    // A payment moves a file into review only from before review (ADR 0016).
+    // A late payment on an APPROVED file used to drag it back to UNDER_REVIEW.
+    const nextStatus =
+      record.status === VisaDocumentStatus.SUBMITTED ||
+      record.status === VisaDocumentStatus.EVALUATED
+        ? VisaDocumentStatus.UNDER_REVIEW
+        : record.status;
+
     this.logger.log(
-      `Direct Service Injection: Payment confirmed for applicationNo=${record.applicationNo}, addedAmount=${addedAmount}. Transitioning status to UNDER_REVIEW, paymentStatus=${newPaymentStatus}`,
+      `Direct Service Injection: Payment confirmed for applicationNo=${record.applicationNo}, addedAmount=${addedAmount}. status ${record.status} -> ${nextStatus}, paymentStatus=${newPaymentStatus}`,
     );
 
     const updated = await this.prisma.visaDocumentation.update({
@@ -291,7 +327,7 @@ export class VisaDocumentationService {
         balanceDue: new Prisma.Decimal(newBalanceDue),
         paymentStatus: newPaymentStatus,
         selectedPaymentOption: paymentOption,
-        status: VisaDocumentStatus.UNDER_REVIEW,
+        status: nextStatus,
       },
     });
 
@@ -307,7 +343,9 @@ export class VisaDocumentationService {
         currency: updated.currency,
       })
       .catch((err) => {
-        this.logger.error(`SendGrid payment confirmed email error: ${err?.message}`);
+        this.logger.error(
+          `SendGrid payment confirmed email error: ${err instanceof Error ? err.message : String(err)}`,
+        );
       });
 
     return updated;
@@ -429,8 +467,6 @@ export class VisaDocumentationService {
 
     return updated;
   }
-
-
 
   async findAllVisaApplications(query: QueryVisaDocumentationDto) {
     const where: Prisma.VisaDocumentationWhereInput = {};
